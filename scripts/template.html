@@ -69,7 +69,7 @@ main h2 .no{display:inline-grid;place-items:center;width:32px;height:32px;border
 .toolbar input{min-width:260px}
 .count{color:var(--muted);font-size:13px}
 .tbl-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px;max-height:680px}
-table{border-collapse:collapse;width:100%;font-size:13.5px}#rt{min-width:1100px}#wt{table-layout:fixed}#wt th:nth-child(1){width:72px}#wt th:nth-child(2){width:140px}#wt th:nth-child(3){width:178px}#wt th:nth-child(4){width:130px}#wt th:nth-child(5){width:110px}#wt td{word-break:break-word}#wt .tag{white-space:normal;max-width:100%;display:inline-block}
+table{border-collapse:collapse;width:100%;font-size:13.5px}#rt{min-width:1100px}#wt{table-layout:fixed}#wt th:nth-child(1){width:72px}#wt th:nth-child(2){width:140px}#wt th:nth-child(3){width:178px}#wt th:nth-child(4){width:130px}#wt th:nth-child(5){width:132px}#wt td{word-break:break-word}#wt .tag{white-space:normal;max-width:100%;display:inline-block;border-radius:7px;line-height:1.45;padding:2px 7px;overflow-wrap:anywhere}
 #rt td:nth-child(2){white-space:nowrap}#rt td:last-child{min-width:260px}
 th{position:sticky;top:0;background:#f1f5f9;text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;cursor:pointer;z-index:1}
 th:hover{background:#e2e8f0}
@@ -93,7 +93,11 @@ tr:hover td{background:#fafbff}
 .det{display:none}.det.open{display:table-row}.det td{background:#f8fafc;font-size:13px}
 .det dl{display:grid;grid-template-columns:110px 1fr;gap:4px 12px;margin:0}.det dt{font-weight:700;color:#334155}.det dd{margin:0}
 .act{font-size:12px;padding:1px 8px;border-radius:99px;white-space:nowrap}
-.act.a1{background:#dcfce7;color:#166534}.act.a2{background:#e0f2fe;color:#075985}.act.a3{background:#fef9c3;color:#854d0e}.act.a4{background:#fee2e2;color:#991b1b}
+.act.a1{background:#dcfce7;color:#166534}.act.a2{background:#e0f2fe;color:#075985}.act.a3{background:#fef9c3;color:#854d0e}.act.a4{background:#fee2e2;color:#991b1b}.act.a5{background:#f1f5f9;color:#334155}
+.act.a5{display:inline-block;white-space:normal;line-height:1.45;border-radius:7px;min-width:5em}
+.feat{color:#d97706;font-weight:800;margin-right:3px}.pre-link{font-size:11.5px;margin-left:4px;white-space:nowrap}
+#pt{min-width:900px}#pt td:nth-child(1){min-width:150px}
+.ust{font-size:12px;padding:1px 8px;white-space:nowrap}.ust.ok{background:#dcfce7;color:#166534}.ust.dead{background:#fee2e2;color:#991b1b}.ust.blocked{background:#fef9c3;color:#854d0e}.ust.unk{background:#f1f5f9;color:#64748b}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px}
 ol.nice,ul.nice{padding-left:20px}ol.nice li,ul.nice li{margin:6px 0}
 .refs{columns:2;column-gap:28px;font-size:13px}.refs li{break-inside:avoid;margin-bottom:5px}
@@ -163,6 +167,12 @@ footer{text-align:center;color:var(--muted);font-size:12.5px;padding:10px 0 40px
 <div class="grid2" style="margin-top:16px"><div id="c-cty" style="height:340px"></div><div id="c-dirc" style="height:340px"></div></div>
 </section>
 
+<section id="portals" data-req="portals"><h2>{{L_sec_portals}}</h2>
+<p class="sdesc">{{DESC_PORTALS}}</p>
+<div class="chips" id="pkinds"></div>
+<div class="tbl-wrap"><table id="pt"><thead><tr><th>{{L_th_portal}}</th><th>{{L_th_kind}}</th><th>{{L_th_org}}</th><th>{{L_th_scope}}</th><th>{{L_th_access}}</th><th>{{L_th_url}}</th></tr></thead><tbody></tbody></table></div>
+</section>
+
 <section id="oss" data-req="repos"><h2>{{L_sec_oss}}</h2>
 <p class="sdesc">{{DESC_OSS}}</p>
 <div class="grid2"><div id="c-stars"></div><div><div id="c-act" style="height:380px"></div><div id="c-actpie" style="height:240px"></div></div></div>
@@ -193,7 +203,8 @@ const textStyle={fontFamily:'Noto Sans CJK SC, PingFang SC, Microsoft YaHei, san
 const ACTC=['#16a34a','#0284c7','#ca8a04','#dc2626'];
 
 // ---------- hide empty sections, number sections, build TOC ----------
-const has={works:W.length>0,teams:T.length>0,repos:R.length>0,events:E.length>0};
+const P=DATA.portals||[];
+const has={works:W.length>0,teams:T.length>0,repos:R.length>0,events:E.length>0,portals:P.length>0};
 document.querySelectorAll('[data-req]').forEach(el=>{const r=el.dataset.req;const ok=r==='html'?el.innerText.trim().split('\n').length>1||el.querySelector('p,ul,ol,div,table'):has[r];if(!ok)el.classList.add('hidden')});
 let secNo=0;document.querySelectorAll('main section').forEach(s=>{if(s.classList.contains('hidden'))return;secNo++;const h=s.querySelector('h2');h.innerHTML=`<span class="no">${secNo}</span>`+h.innerHTML;
  const a=document.createElement('a');a.href='#'+s.id;a.textContent=secNo+' '+h.textContent.replace(/^\d+/,'');document.getElementById('toc').appendChild(a)});
@@ -233,9 +244,24 @@ if(has.events)renderTL();
 
 // ---------- taxonomy tree ----------
 (function(){
- const n=DATA.treeLeaves;
- const children=DK.map(k=>{const ws=W.filter(w=>dl(w.dirs).includes(k)).sort((a,b)=>(b.peer-a.peer)||b.date.localeCompare(a.date)).slice(0,n);
-  return{name:DIRS[k].name,dk:k,itemStyle:{color:DC[k],borderColor:DC[k]},label:{color:'#111',fontWeight:'bold'},children:ws.map(w=>({name:w.name.length>30?w.name.slice(0,30)+'…':w.name,full:w.name,status:w.status,itemStyle:{color:'#fff',borderColor:DC[k]}}))}});
+ const n=DATA.treeLeaves,TS=DATA.treeSort;
+ // featured (landmark/flagship) works always first; the rest by tree_sort:
+ // citations = most cited, recent = peer-reviewed newest, spread = peer-reviewed spaced evenly over time
+ function pick(ws){
+  const f=ws.filter(w=>w.featured).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,n),k=n-f.length;
+  let rest=ws.filter(w=>!w.featured),out=[];
+  if(k>0&&rest.length){
+   if(TS==='citations')out=rest.sort((a,b)=>((b.citations||0)-(a.citations||0))||(b.peer-a.peer)||a.date.localeCompare(b.date)).slice(0,k);
+   else if(TS==='recent')out=rest.sort((a,b)=>(b.peer-a.peer)||b.date.localeCompare(a.date)).slice(0,k);
+   else{const pool=(rest.filter(w=>w.peer).length>=k?rest.filter(w=>w.peer):rest).sort((a,b)=>a.date.localeCompare(b.date));
+    if(pool.length<=k)out=pool;else{const ix=new Set();for(let i=0;i<k;i++)ix.add(k===1?0:Math.round(i*(pool.length-1)/(k-1)));out=[...ix].map(i=>pool[i])}}
+  }
+  return f.concat(out).sort((a,b)=>a.date.localeCompare(b.date));
+ }
+ // width-aware truncation: CJK characters count double, so Chinese and English labels end at a similar width
+ const short=s=>{let w=0,o='';for(const ch of s){w+=/[\u2e80-\uffff]/.test(ch)?2:1;if(w>40)return o+'…';o+=ch}return o};
+ const children=DK.map(k=>{const ws=pick(W.filter(w=>dl(w.dirs).includes(k)));
+  return{name:DIRS[k].name,dk:k,itemStyle:{color:DC[k],borderColor:DC[k]},label:{color:'#111',fontWeight:'bold'},children:ws.map(w=>({name:(w.featured?'★ ':'')+short(w.name),full:w.name,status:w.status+(w.featured?' · ★ '+L.featured_tip:''),itemStyle:{color:w.featured?DC[k]:'#fff',borderColor:DC[k]}}))}});
  const leaves=children.reduce((s,c)=>s+Math.max(1,c.children.length),0);
  const el=document.getElementById('c-tree');el.style.height=Math.max(360,leaves*26+40)+'px';
  const c=mk('c-tree');
@@ -249,16 +275,17 @@ if(has.events)renderTL();
 let wDir=null,wSort={k:'date',d:-1};
 document.getElementById('wdirs').innerHTML=`<span class="chip on" data-d="">${L.all_dirs}</span>`+DK.map(k=>`<span class="chip" data-d="${k}"><i style="background:${DC[k]}"></i>${esc(DIRS[k].short)} <small>(${W.filter(w=>dl(w.dirs).includes(k)).length})</small></span>`).join('');
 document.querySelectorAll('#wdirs .chip').forEach(ch=>ch.onclick=()=>filterDir(ch.dataset.d||null));
+if(W.some(w=>w.featured)){const o=document.createElement('option');o.value='f';o.textContent=L.featured_only;document.getElementById('wst').appendChild(o)}
 [...new Set(W.map(w=>w.date.slice(0,4)))].sort().forEach(y=>{const o=document.createElement('option');o.textContent=y;document.getElementById('wyr').appendChild(o)});
 function filterDir(k){wDir=k;document.querySelectorAll('#wdirs .chip').forEach(x=>x.classList.toggle('on',(x.dataset.d||null)===k));renderW()}
 ['wq','wst','wyr'].forEach(id=>document.getElementById(id).addEventListener('input',renderW));
 document.querySelectorAll('#wt th[data-k]').forEach(th=>th.onclick=()=>{const k=th.dataset.k;wSort={k,d:wSort.k===k?-wSort.d:(k==='date'?-1:1)};renderW()});
 function renderW(){
  const q=document.getElementById('wq').value.trim().toLowerCase(),st=document.getElementById('wst').value,yr=document.getElementById('wyr').value;
- let ws=W.filter(w=>(!wDir||dl(w.dirs).includes(wDir))&&(st===''||String(+w.peer)===st)&&(!yr||w.date.startsWith(yr))&&(!q||(w.name+(w.title||'')+w.inst+w.contrib+w.status).toLowerCase().includes(q)));
+ let ws=W.filter(w=>(!wDir||dl(w.dirs).includes(wDir))&&(st===''||(st==='f'?w.featured:String(+w.peer)===st))&&(!yr||w.date.startsWith(yr))&&(!q||(w.name+(w.title||'')+w.inst+w.contrib+w.status).toLowerCase().includes(q)));
  ws.sort((a,b)=>String(a[wSort.k]).localeCompare(String(b[wSort.k]),'zh')*wSort.d);
  document.getElementById('wcount').textContent=L.count.replace('{n}',ws.length).replace('{p}',ws.filter(w=>w.peer).length);
- document.querySelector('#wt tbody').innerHTML=ws.map(w=>`<tr><td style="white-space:nowrap">${esc(w.date)}</td><td><a class="nm" href="${safeUrl(w.url)}" target="_blank" rel="noopener" title="${esc(w.title||'')}">${esc(w.name)}</a></td><td>${dtags(w.dirs)}</td><td>${esc(w.inst)}</td><td><span class="tag ${w.peer?'peer':'pre'}">${esc(w.status)}</span></td><td>${esc(w.contrib)}</td></tr>`).join('');
+ document.querySelector('#wt tbody').innerHTML=ws.map(w=>`<tr><td style="white-space:nowrap">${esc(w.date)}</td><td>${w.featured?`<span class="feat" title="${esc(L.featured_tip)}">★</span>`:''}<a class="nm" href="${safeUrl(w.url)}" target="_blank" rel="noopener" title="${esc(w.title||'')}">${esc(w.name)}</a>${w.preprint_url?`<a class="pre-link" href="${safeUrl(w.preprint_url)}" target="_blank" rel="noopener">[${esc(L.preprint_link)}]</a>`:''}</td><td>${dtags(w.dirs)}</td><td>${esc(w.inst)}</td><td><span class="tag ${w.peer?'peer':'pre'}">${esc(w.status)}</span></td><td>${esc(w.contrib)}</td></tr>`).join('');
 }
 renderW();
 
@@ -292,7 +319,7 @@ function showCountry(n){
  if(ws.length)h+=`<h4 style="margin:12px 0 4px">${L.works_n}（${ws.length}）</h4><div style="font-size:12.5px">`+ws.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(w=>`<div>· <a href="${safeUrl(w.url)}" target="_blank" rel="noopener">${esc(w.name)}</a> <span class="legend-note">${esc(w.date)}｜${esc(w.status)}</span></div>`).join('')+'</div>';
  document.getElementById('mpanel').innerHTML=h;
 }
-function drawCty(){const d=mapData().sort((a,b)=>a.value-b.value);ctyC.setOption({textStyle,title:{text:metric==='team'?L.cty_team_title:L.cty_work_title,textStyle:{fontSize:14}},tooltip:{},grid:{left:90,right:30,top:36,bottom:20},xAxis:{type:'value',minInterval:1},yAxis:{type:'category',data:d.map(x=>x.cn)},series:[{type:'bar',data:d.map(x=>x.value),itemStyle:{color:'#6366f1',borderRadius:[0,6,6,0]},label:{show:true,position:'right'}}]},true);ctyC.off('click');ctyC.on('click',p=>{const e=d.find(x=>x.cn===p.name);showCountry(e?e.name:p.name)})}
+function drawCty(){const d=mapData().sort((a,b)=>a.value-b.value);ctyC.setOption({textStyle,title:{text:metric==='team'?L.cty_team_title:L.cty_work_title,textStyle:{fontSize:14}},tooltip:{},grid:{left:8,right:30,top:36,bottom:20,containLabel:true},xAxis:{type:'value',minInterval:1},yAxis:{type:'category',data:d.map(x=>x.cn),axisLabel:{formatter:v=>v.length>12?v.slice(0,11)+'…':v}},series:[{type:'bar',data:d.map(x=>x.value),itemStyle:{color:'#6366f1',borderRadius:[0,6,6,0]},label:{show:true,position:'right'}}]},true);ctyC.off('click');ctyC.on('click',p=>{const e=d.find(x=>x.cn===p.name);showCountry(e?e.name:p.name)})}
 if(has.teams){
  mapC=mk('worldmap');drawMap();mapC.on('click',p=>showCountry(p.name));
  document.querySelectorAll('#mmetric .chip').forEach(ch=>ch.onclick=()=>{metric=ch.dataset.m;document.querySelectorAll('#mmetric .chip').forEach(x=>x.classList.toggle('on',x===ch));drawMap();drawCty()});
@@ -304,11 +331,13 @@ if(has.teams){
 }
 
 // ---------- repos ----------
+// long owner/name labels: keep both ends ("farmGTEx/Cattl…Pipeline_v0"), full name in the tooltip
+function midTrunc(s,n){s=String(s);if(s.length<=n)return s;const a=Math.ceil((n-1)*0.45);return s.slice(0,a)+'…'+s.slice(s.length-(n-1-a))}
 if(has.repos){
  const N=Math.min(DATA.topN,R.length),top=R.slice(0,N).reverse();
  const lmin=Math.pow(10,Math.floor(Math.log10(Math.max(1,Math.min(...R.map(r=>r.stars||1))))));
  const el=document.getElementById('c-stars');el.style.height=Math.max(300,N*20+70)+'px';
- mk('c-stars').setOption({textStyle,title:{text:L.stars_title.replace('{n}',N),textStyle:{fontSize:14}},tooltip:{formatter:p=>{const r=top[p.dataIndex];return `<b>${esc(r.repo)}</b><br>⭐ ${r.stars.toLocaleString()}　Forks ${r.forks.toLocaleString()}<br>${esc(r.cat)}｜${esc(r.act)}`}},grid:{left:220,right:60,top:36,bottom:24},xAxis:{type:'log',min:lmin},yAxis:{type:'category',data:top.map(r=>r.repo),axisLabel:{fontSize:11}},
+ mk('c-stars').setOption({textStyle,title:{text:L.stars_title.replace('{n}',N),textStyle:{fontSize:14}},tooltip:{formatter:p=>{const r=top[p.dataIndex];return `<b>${esc(r.repo)}</b><br>⭐ ${r.stars.toLocaleString()}　Forks ${r.forks.toLocaleString()}<br>${esc(r.cat)}｜${esc(r.act)}`}},grid:{left:8,right:60,top:36,bottom:24,containLabel:true},xAxis:{type:'log',min:lmin},yAxis:{type:'category',data:top.map(r=>r.repo),axisLabel:{fontSize:11,formatter:v=>midTrunc(v,34)}},
   series:[{type:'bar',data:top.map(r=>({value:Math.max(1,r.stars),itemStyle:{color:ACTC[r.actIdx],borderRadius:[0,5,5,0]}})),label:{show:true,position:'right',fontSize:10.5,formatter:p=>p.value>=1000?(p.value/1000).toFixed(1)+'k':p.value}}]});
  mk('c-act').setOption({textStyle,title:{text:L.act_title,textStyle:{fontSize:14}},tooltip:{formatter:p=>`<b>${esc(p.data[3])}</b><br>${p.data[0]} ${L.days}<br>⭐ ${p.data[1].toLocaleString()}`},grid:{left:56,right:20,top:40,bottom:48},xAxis:{type:'value',name:L.days,nameLocation:'middle',nameGap:24,inverse:true},yAxis:{type:'log',name:'Stars',min:lmin},
   series:[{type:'scatter',data:R.map(r=>[r.days,Math.max(1,r.stars),r.forks,r.repo,r.actIdx]),symbolSize:d=>Math.max(7,Math.min(40,Math.sqrt(d[2])/2.2)),itemStyle:{opacity:.75,color:p=>ACTC[p.data[4]]}}]});
@@ -322,10 +351,21 @@ if(has.repos){
  function renderR(){
   let rs=R.filter(r=>!rCat||r.cat===rCat);
   rs.sort((a,b)=>{const x=a[rSort.k],y=b[rSort.k];return (typeof x==='number'?x-y:String(x).localeCompare(String(y)))*rSort.d});
-  document.querySelector('#rt tbody').innerHTML=rs.map((r,i)=>`<tr style="cursor:pointer" onclick="document.getElementById('rd${i}').classList.toggle('open')"><td><a class="nm" href="https://github.com/${esc(r.repo)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(r.repo)}</a>${r.archived?' <span class="tag">archived</span>':''}</td><td>${esc(r.cat)}</td><td>${r.stars.toLocaleString()}</td><td>${r.forks.toLocaleString()}</td><td style="white-space:nowrap">${esc(r.last)}</td><td style="font-size:12px">${esc(r.rel)}</td><td><span class="act a${r.actIdx+1}">${esc(r.act)}</span></td><td style="font-size:12px" title="${esc(r.license)}">${esc(r.license.length>28?r.license.slice(0,28)+'…':r.license)}</td><td>${esc(r.what)}</td></tr>
+  document.querySelector('#rt tbody').innerHTML=rs.map((r,i)=>`<tr style="cursor:pointer" onclick="document.getElementById('rd${i}').classList.toggle('open')"><td><a class="nm" href="https://github.com/${esc(r.repo)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(r.repo)}</a>${r.archived?' <span class="tag">archived</span>':''}</td><td>${esc(r.cat)}</td><td>${r.stars.toLocaleString()}</td><td>${r.forks.toLocaleString()}</td><td style="white-space:nowrap">${esc(r.last)}</td><td style="font-size:12px">${esc(r.rel)}</td><td><span class="act a${r.stable?5:r.actIdx+1}" title="${esc(r.act)}">${esc(r.actLabel||r.act)}</span></td><td style="font-size:12px" title="${esc(r.license)}">${esc(r.license.length>28?r.license.slice(0,28)+'…':r.license)}</td><td>${esc(r.what)}</td></tr>
   <tr class="det" id="rd${i}"><td colspan="9"><dl><dt>${L.det_arch}</dt><dd>${esc(r.arch)||'—'}</dd><dt>${L.det_run}</dt><dd>${esc(r.run)||'—'}</dd><dt>${L.det_deps}</dt><dd>${esc(r.deps)||'—'}</dd><dt>${L.det_lim}</dt><dd>${esc(r.lim)||'—'}</dd></dl></td></tr>`).join('');
  }
  renderR();
+}
+
+// ---------- portals ----------
+if(has.portals){
+ let pKind=null;
+ const kinds=[...new Set(P.map(p=>p.kind).filter(Boolean))];
+ document.getElementById('pkinds').innerHTML=kinds.length>1?`<span class="chip on" data-k="">${L.all_kinds}</span>`+kinds.map(k=>`<span class="chip" data-k="${esc(k)}">${esc(k)} (${P.filter(p=>p.kind===k).length})</span>`).join(''):'';
+ document.querySelectorAll('#pkinds .chip').forEach(ch=>ch.onclick=()=>{pKind=ch.dataset.k||null;document.querySelectorAll('#pkinds .chip').forEach(x=>x.classList.toggle('on',x===ch));renderP()});
+ const ust=p=>{const s=p.url_status;const c=s==='ok'?'ok':s==='dead'?'dead':s==='blocked'?'blocked':'unk';const t=s==='ok'?L.url_ok:s==='dead'?L.url_dead:s==='blocked'?L.url_blocked:L.url_unchecked;return `<span class="ust ${c}" title="${esc(p.url_checked||'')}">${t}</span>${p.url_checked?`<div class="legend-note">${esc(p.url_checked)}</div>`:''}`};
+ function renderP(){document.querySelector('#pt tbody').innerHTML=P.filter(p=>!pKind||p.kind===pKind).map(p=>`<tr><td><a class="nm" href="${safeUrl(p.url)}" target="_blank" rel="noopener">${esc(p.name)}</a>${p.dirs?`<div>${dtags(p.dirs)}</div>`:''}${p.launched?`<div class="legend-note">${esc(p.launched)}</div>`:''}</td><td>${esc(p.kind)}</td><td>${esc(p.org)}</td><td>${esc(p.scope)}${p.desc?`<div class="legend-note">${esc(p.desc)}</div>`:''}${p.works?`<div class="legend-note">${L.rep_works}：${esc(p.works)}</div>`:''}</td><td>${esc(p.access)}</td><td>${ust(p)}</td></tr>`).join('')}
+ renderP();
 }
 
 // ---------- refs ----------

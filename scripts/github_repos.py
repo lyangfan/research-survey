@@ -9,7 +9,13 @@ Primary: GitHub REST API (set GITHUB_TOKEN for 5,000 req/h; anonymous = 60 req/h
   GET /repos/{owner}/{repo}/releases/latest         tag_name, published_at (404 = no release)
 Fallback when rate-limited (403/429): public HTML page + commits.atom / releases.atom feeds
 (this is how the original survey was fetched; parse is best-effort and may break if GitHub
-changes its markup — always spot-check a few repos by hand).
+changes its markup — always spot-check a few repos by hand). When the page shows no license,
+the fallback reads raw LICENSE / LICENSE.md / COPYING / DESCRIPTION (R packages) from
+raw.githubusercontent.com and guesses the SPDX id (marked "(from LICENSE file)").
+
+Activity labels only measure the last commit. For mature tools that are intentionally stable
+(e.g. a finished QTL mapper), set "stable": true in repos.json: the table then shows
+"成熟稳定（低频更新）" instead of "停滞" (charts still use the day count).
 
 Usage
   python github_repos.py data/repos.json                  # update in place
@@ -100,6 +106,35 @@ def via_html(repo):
     return d
 
 
+LICENSE_PATTERNS = [
+    ("AGPL-3.0", r"GNU AFFERO GENERAL PUBLIC LICENSE"), ("LGPL-3.0", r"GNU LESSER GENERAL PUBLIC LICENSE\s+Version 3"),
+    ("LGPL-2.1", r"GNU LESSER GENERAL PUBLIC LICENSE\s+Version 2\.1"), ("GPL-3.0", r"GNU GENERAL PUBLIC LICENSE\s+Version 3"),
+    ("GPL-2.0", r"GNU GENERAL PUBLIC LICENSE\s+Version 2"), ("Apache-2.0", r"Apache License,?\s+Version 2\.0"),
+    ("MPL-2.0", r"Mozilla Public License,?\s+(v\. |Version )2\.0"), ("BSD-3-Clause", r"Neither the name of"),
+    ("BSD-2-Clause", r"Redistributions in binary form must reproduce"), ("MIT", r"Permission is hereby granted, free of charge"),
+    ("CC-BY-4.0", r"Creative Commons Attribution 4\.0"), ("CC-BY-NC-4.0", r"Attribution-NonCommercial 4\.0"),
+    ("Unlicense", r"This is free and unencumbered software"),
+]
+
+
+def license_from_files(repo):
+    """Guess an SPDX id from the raw LICENSE file (or the R DESCRIPTION 'License:' field)."""
+    for name in ("LICENSE", "LICENSE.md", "LICENSE.txt", "COPYING", "LICENCE", "DESCRIPTION"):
+        t = _get(f"https://raw.githubusercontent.com/{repo}/HEAD/{name}")
+        if t.startswith("__HTTP"):
+            continue
+        if name == "DESCRIPTION":
+            m = re.search(r"^License:\s*(.+)$", t, re.M)
+            if m:
+                return m.group(1).strip() + "（from DESCRIPTION）"
+            continue
+        for spdx, pat in LICENSE_PATTERNS:
+            if re.search(pat, t, re.I):
+                return spdx + "（from LICENSE file）"
+        return "Other（需人工核对 LICENSE 文件）"
+    return None
+
+
 def fetch(repo, html_only=False, state={"api": True}):
     if not html_only and state["api"]:
         try:
@@ -109,7 +144,10 @@ def fetch(repo, html_only=False, state={"api": True}):
                 log("[github] API rate-limited -> falling back to HTML/Atom scraping (set GITHUB_TOKEN to avoid)")
             state["api"] = False
     time.sleep(0.5)
-    return via_html(repo)
+    d = via_html(repo)
+    if not d.get("status") and not d.get("license"):
+        d["license"] = license_from_files(d.get("canonical") or repo)
+    return d
 
 
 if __name__ == "__main__":

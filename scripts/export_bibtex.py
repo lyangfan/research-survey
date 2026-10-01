@@ -7,6 +7,12 @@ Outputs (prefix via --out, default ./references):
   references.ris            RIS (JOUR / CPAPER / UNPB / ELEC) with KW tags = direction keys
   zotero_identifiers.txt    one DOI or arXiv ID per line -> Zotero "Add Item by Identifier" (magic wand)
 
+Author names
+  Any of "Smith AB" (PubMed / Europe PMC), "Smith, Anna B." or "Anna B. Smith" is accepted and
+  written as "Last, First" (BibTeX) / "Last, First" (RIS). Group authors ("GTEx Consortium") or a
+  work-level `corporate_author` are kept as ONE author: {GTEx Consortium} in BibTeX, no comma in
+  RIS (Zotero imports it as a single-field name). A literal "et al." becomes BibTeX "and others".
+
 Zotero import
   File -> Import… -> choose references.bib or .ris -> tick "Place imported collections and items
   into new collection". Tags come from `keywords` (BibTeX) / KW (RIS). For the most complete
@@ -20,9 +26,9 @@ import os
 import re
 import unicodedata
 
-from common import norm_arxiv, norm_doi
+from common import author_surname, is_preprint_doi, norm_arxiv, norm_doi, parse_author, preprint_server
 
-PREPRINT_RE = re.compile(r"arxiv|预印本|preprint|biorxiv|medrxiv", re.I)
+PREPRINT_RE = re.compile(r"arxiv|预印本|preprint|biorxiv|medrxiv|chemrxiv|ssrn|research square", re.I)
 
 
 def ascii_slug(s):
@@ -37,7 +43,8 @@ def kind(w):
     if w.get("peer"):
         st = (w.get("status") or "") + " " + (w.get("venue") or "")
         return "conference" if re.search(r"ICLR|NeurIPS|ICML|ACL|EMNLP|NAACL|CVPR|ICCV|ECCV|AAAI|IJCAI|KDD|SIGIR|WWW|Conference|Proceedings|研讨会|workshop", st, re.I) else "journal"
-    if norm_arxiv(w.get("arxiv") or w.get("url")) or PREPRINT_RE.search(w.get("status") or ""):
+    if (norm_arxiv(w.get("arxiv") or w.get("url")) or PREPRINT_RE.search(w.get("status") or "")
+            or is_preprint_doi(w.get("doi") or (w.get("url") if "doi.org" in (w.get("url") or "") else ""))):
         return "preprint"
     return "blog"
 
@@ -46,9 +53,43 @@ def bib_escape(s):
     return str(s or "").replace("\\", "\\textbackslash{}").replace("&", "\\&").replace("%", "\\%").replace("#", "\\#").replace("_", "\\_")
 
 
+def author_list(w):
+    """Parsed authors: work-level corporate_author(s) first (if not already listed), then authors."""
+    corp = w.get("corporate_author") or []
+    corp = [corp] if isinstance(corp, str) else list(corp)
+    names = list(w.get("authors") or [])
+    have = {str(n).strip("{} ").lower() for n in names}
+    out = [dict(kind="corporate", last=c.strip("{} "), first="", suffix="", raw=c) for c in corp if c.strip("{} ").lower() not in have]
+    for n in names:
+        a = parse_author(n)
+        if a:
+            out.append(a)
+    # "et al." only makes sense once, at the end
+    etal = any(a["kind"] == "etal" for a in out)
+    out = [a for a in out if a["kind"] != "etal"]
+    if etal:
+        out.append(dict(kind="etal", last="", first="", suffix="", raw="et al."))
+    return out
+
+
+def bib_name(a):
+    if a["kind"] == "etal":
+        return "others"
+    if a["kind"] == "corporate":
+        return "{" + bib_escape(a["last"]) + "}"
+    parts = [a["last"]] + ([a["suffix"]] if a["suffix"] else []) + ([a["first"]] if a["first"] else [])
+    return bib_escape(", ".join(parts))
+
+
+def ris_name(a):
+    if a["kind"] == "corporate":
+        return a["last"]  # no comma -> Zotero keeps it as one single-field (institutional) name
+    return ", ".join([a["last"]] + ([a["first"]] if a["first"] else []) + ([a["suffix"]] if a["suffix"] else []))
+
+
 def key_for(w, used):
-    au = (w.get("authors") or [""])[0]
-    last = ascii_slug(au.split()[-1] if au else "") or ascii_slug((w.get("inst") or "").split("/")[0])[:12] or "anon"
+    au = next((a["raw"] for a in author_list(w) if a["kind"] != "etal"), "")
+    last = ascii_slug(author_surname(au)) or ascii_slug((w.get("inst") or "").split("/")[0])[:12] or "anon"
     yr = (w.get("date") or "")[:4]
     first = next((ascii_slug(t) for t in re.split(r"\s+", w.get("title") or w.get("name") or "") if len(ascii_slug(t)) > 3), "work")
     k = f"{last.lower()}{yr}{first.lower()}"
@@ -66,8 +107,9 @@ def to_bib(w, key):
     ax = norm_arxiv(w.get("arxiv") or w.get("url"))
     doi = norm_doi(w.get("doi") or (w.get("url") if "doi.org" in (w.get("url") or "") else ""))
     f = {"title": "{" + bib_escape(title) + "}", "year": (w.get("date") or "")[:4]}
-    if w.get("authors"):
-        f["author"] = " and ".join(bib_escape(a) for a in w["authors"])
+    aus = author_list(w)
+    if aus:
+        f["author"] = " and ".join(bib_name(a) for a in aus)
     elif w.get("inst"):
         f["author"] = "{" + bib_escape(w["inst"]) + "}"
     if len(w.get("date") or "") >= 7:
@@ -84,7 +126,11 @@ def to_bib(w, key):
         if kd == "preprint" and ax:
             f.update(eprint=ax, archiveprefix="arXiv")
             f["howpublished"] = f"arXiv preprint arXiv:{ax}"
-        elif kd != "preprint":
+        elif kd == "preprint":
+            srv = preprint_server(doi, w.get("venue") or w.get("status") or "", w.get("url") or "") or w.get("venue") or "Preprint"
+            f["howpublished"] = bib_escape(f"{srv} preprint" + (f" doi:{doi}" if doi else ""))
+            f["publisher"] = bib_escape(srv)
+        else:
             f["howpublished"] = "\\url{" + (w.get("url") or "") + "}"
     for k in ("volume", "pages", "number"):
         if w.get(k):
@@ -95,12 +141,15 @@ def to_bib(w, key):
         f["url"] = w["url"]
     if ax and kd != "preprint":
         f["eprint"], f["archiveprefix"] = ax, "arXiv"
-    note = "; ".join(x for x in [w.get("status"), ("checked " + w["checked"]) if w.get("checked") else ""] if x)
+    pre = norm_doi(w.get("preprint_doi"))
+    note = "; ".join(x for x in [w.get("status"), ("preprint doi:" + pre) if pre else "",
+                                 ("checked " + w["checked"]) if w.get("checked") else ""] if x)
     if note:
         f["note"] = bib_escape(note)
     if w.get("dirs"):
         f["keywords"] = ", ".join(w["dirs"] if isinstance(w["dirs"], list) else w["dirs"].split(";"))
-    body = ",\n".join(f"  {k} = {{{v}}}" if not v.startswith("{") else f"  {k} = {v}" for k, v in f.items() if v)
+    # every value is wrapped in one pair of braces; title / corporate authors carry an extra inner pair
+    body = ",\n".join(f"  {k} = {{{v}}}" for k, v in f.items() if v)
     return f"@{typ}{{{key},\n{body}\n}}\n"
 
 
@@ -108,9 +157,10 @@ def to_ris(w):
     kd = kind(w)
     ty = {"journal": "JOUR", "conference": "CPAPER", "preprint": "UNPB"}.get(kd, "ELEC")
     lines = [f"TY  - {ty}", f"TI  - {w.get('title') or w.get('name')}"]
-    for a in w.get("authors") or []:
-        lines.append(f"AU  - {a}")
-    if not w.get("authors") and w.get("inst"):
+    aus = [a for a in author_list(w) if a["kind"] != "etal"]
+    for a in aus:
+        lines.append(f"AU  - {ris_name(a)}")
+    if not aus and w.get("inst"):
         lines.append(f"AU  - {w['inst']}")
     d = w.get("date") or ""
     lines.append(f"PY  - {d[:4]}")
@@ -122,7 +172,8 @@ def to_ris(w):
     elif kd == "conference" and venue:
         lines.append(f"T2  - {venue}")
     elif kd == "preprint":
-        lines.append("PB  - " + (venue if venue and venue != "arXiv" else "arXiv"))
+        srv = preprint_server(w.get("doi"), venue or w.get("status") or "", w.get("url") or "") or venue or "arXiv"
+        lines.append("PB  - " + srv)
     for k, tag in (("volume", "VL"), ("pages", "SP")):
         if w.get(k):
             lines.append(f"{tag}  - {w[k]}")
@@ -134,7 +185,9 @@ def to_ris(w):
     for k in (w.get("dirs") if isinstance(w.get("dirs"), list) else (w.get("dirs") or "").split(";")):
         if k:
             lines.append(f"KW  - {k}")
-    note = "; ".join(x for x in [w.get("status"), w.get("contrib"), ("checked " + w["checked"]) if w.get("checked") else ""] if x)
+    pre = norm_doi(w.get("preprint_doi"))
+    note = "; ".join(x for x in [w.get("status"), w.get("contrib"), ("preprint doi:" + pre) if pre else "",
+                                 ("checked " + w["checked"]) if w.get("checked") else ""] if x)
     if note:
         lines.append(f"N1  - {note}")
     lines.append("ER  - ")

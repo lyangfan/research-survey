@@ -13,6 +13,11 @@ Sub-commands
   refs    backward snowball         GET  /graph/v1/paper/{id}/references
   cites   forward snowball          GET  /graph/v1/paper/{id}/citations
 
+HTTP 429 handling: every call is retried with exponential backoff (honouring Retry-After,
+capped by --max-wait); if the API still refuses after --retries attempts the script STOPS
+GRACEFULLY: it writes the records fetched so far, prints a warning with fallbacks (OpenAlex,
+Europe PMC, Crossref, or set S2_API_KEY) and exits with code 2 instead of a traceback.
+
 No year filter is applied unless --year is given; pass it only when the user explicitly
 asked for a time range.
 
@@ -24,15 +29,39 @@ Examples
   python search_s2.py cites ARXIV:2408.06292 --max 500 --out snowball_fwd.jsonl
 """
 import argparse
-import os
-import time
-
-from common import get_json, http_get, log, write_jsonl, today
 import json
+import os
+import sys
+import time
+import urllib.error
+
+from common import get_json, http_get, log, log_query, write_jsonl, today
 
 BASE = "https://api.semanticscholar.org/graph/v1"
 FIELDS = "title,externalIds,venue,publicationVenue,year,publicationDate,authors,citationCount,publicationTypes,journal,url,abstract"
 _last = [0.0]
+RETRY = {"retries": 5, "backoff": 5, "max_wait": 90}
+DEGRADED = []  # messages about calls that failed after all retries
+
+
+class Degraded(Exception):
+    pass
+
+
+def _call(fn, url, **kw):
+    """get_json/http_get with retry/backoff; raise Degraded (caught by callers) on persistent 429/5xx."""
+    try:
+        return fn(url, headers=_hdr(), retries=RETRY["retries"], backoff=RETRY["backoff"], max_wait=RETRY["max_wait"], **kw)
+    except urllib.error.HTTPError as e:
+        if e.code in (429, 500, 502, 503, 504):
+            msg = f"HTTP {e.code} after {RETRY['retries']} retries on {url.split('?')[0]}"
+            DEGRADED.append(msg)
+            raise Degraded(msg)
+        raise
+    except (urllib.error.URLError, TimeoutError) as e:
+        msg = f"network error after retries: {e}"
+        DEGRADED.append(msg)
+        raise Degraded(msg)
 
 
 def _hdr():
@@ -62,6 +91,9 @@ def norm(p, src="s2"):
         url=p.get("url"), abstract=p.get("abstract") or "", checked=today())
 
 
+TOTAL = [None]
+
+
 def search(q, year=None, max_n=100):
     rows, off = [], 0
     while off < max_n:
@@ -69,7 +101,11 @@ def search(q, year=None, max_n=100):
         params = {"query": q, "fields": FIELDS, "limit": min(100, max_n - off), "offset": off}
         if year:
             params["year"] = year
-        d = get_json(BASE + "/paper/search", params=params, headers=_hdr(), backoff=5)
+        try:
+            d = _call(get_json, BASE + "/paper/search", params=params)
+        except Degraded:
+            break
+        TOTAL[0] = d.get("total", TOTAL[0])
         rows += [norm(p) for p in d.get("data", [])]
         log(f"[s2] {len(rows)}/{d.get('total')}")
         if "next" not in d:
@@ -87,7 +123,11 @@ def bulk(q, year=None, max_n=1000):
             params["year"] = year
         if token:
             params["token"] = token
-        d = get_json(BASE + "/paper/search/bulk", params=params, headers=_hdr(), backoff=5)
+        try:
+            d = _call(get_json, BASE + "/paper/search/bulk", params=params)
+        except Degraded:
+            break
+        TOTAL[0] = d.get("total", TOTAL[0])
         rows += [norm(p) for p in d.get("data", [])]
         log(f"[s2 bulk] {len(rows)}/{d.get('total')}")
         token = d.get("token")
@@ -101,8 +141,10 @@ def batch(ids):
     for i in range(0, len(ids), 400):
         _throttle()
         chunk = ids[i:i + 400]
-        txt = http_get(BASE + "/paper/batch", params={"fields": FIELDS}, headers=_hdr(),
-                       data={"ids": chunk}, backoff=5)
+        try:
+            txt = _call(http_get, BASE + "/paper/batch", params={"fields": FIELDS}, data={"ids": chunk})
+        except Degraded:
+            break
         for q, p in zip(chunk, json.loads(txt)):
             r = norm(p) or dict(source="s2", status="not_found", checked=today())
             r["query_id"] = q
@@ -115,8 +157,11 @@ def graph(pid, kind, max_n=1000):
     rows, off = [], 0
     while off < max_n:
         _throttle()
-        d = get_json(f"{BASE}/paper/{pid}/{kind}", headers=_hdr(), backoff=5,
-                     params={"fields": FIELDS, "limit": min(1000, max_n - off), "offset": off})
+        try:
+            d = _call(get_json, f"{BASE}/paper/{pid}/{kind}",
+                      params={"fields": FIELDS, "limit": min(1000, max_n - off), "offset": off})
+        except Degraded:
+            break
         rows += [norm(x.get(key), "s2-" + kind) for x in d.get("data", []) if x.get(key)]
         if "next" not in d:
             break
@@ -133,8 +178,12 @@ if __name__ == "__main__":
     ap.add_argument("--ids", help="comma-separated ids for batch, or @file with one id per line")
     ap.add_argument("--year", help="e.g. 2024-2026 or 2024-; optional; no date filter unless given (pass only when the user asked for a time range)")
     ap.add_argument("--max", type=int, default=100)
+    ap.add_argument("--retries", type=int, default=5, help="retries per call on 429/5xx (default 5)")
+    ap.add_argument("--max-wait", type=float, default=90, help="max seconds to sleep per retry (default 90)")
+    ap.add_argument("--log", help="append query + hit count to this TSV (default $SURVEY_QUERY_LOG)")
     ap.add_argument("--out", default="-")
     a = ap.parse_args()
+    RETRY.update(retries=a.retries, max_wait=a.max_wait)
     if a.cmd == "search":
         res = search(a.query, a.year, a.max)
     elif a.cmd == "bulk":
@@ -144,4 +193,12 @@ if __name__ == "__main__":
         res = batch([i.strip() for i in ids if i.strip()])
     else:
         res = graph(a.query, "references" if a.cmd == "refs" else "citations", a.max)
-    write_jsonl(a.out, [r for r in res if r])
+    res = [r for r in res if r]
+    write_jsonl(a.out, res)
+    if a.cmd in ("search", "bulk"):
+        log_query(a.log, "s2-" + a.cmd, a.query, TOTAL[0], len(res), a.out, year=a.year, degraded="yes" if DEGRADED else "")
+    if DEGRADED:
+        log(f"[s2] WARNING: stopped early ({DEGRADED[-1]}); kept {len(res)} records fetched so far.")
+        log("[s2] Fallbacks: set S2_API_KEY (free key), retry later, or use search_openalex.py / "
+            "search_europepmc.py / search_crossref.py for the same query or IDs.")
+        sys.exit(2)

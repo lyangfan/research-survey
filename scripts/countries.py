@@ -34,3 +34,33 @@ def zh(code):
 
 def en(code):
     return COUNTRIES.get(code, (code, code))[1]
+
+
+# extra spellings seen in PubMed / Europe PMC / OpenAlex affiliation strings
+_ALIASES = {
+    "USA": "US", "U.S.A.": "US", "U.S.": "US", "United States of America": "US",
+    "UK": "GB", "U.K.": "GB", "England": "GB", "Scotland": "GB", "Wales": "GB", "Northern Ireland": "GB", "Great Britain": "GB",
+    "P.R. China": "CN", "PR China": "CN", "P. R. China": "CN", "People's Republic of China": "CN", "Beijing": "CN", "Shanghai": "CN",
+    "Republic of Korea": "KR", "Korea": "KR", "Hong Kong SAR": "HK", "Macau": "MO", "Taiwan, ROC": "TW",
+    "Czech Republic": "CZ", "Turkey": "TR", "The Netherlands": "NL", "Russian Federation": "RU", "Viet Nam": "VN", "UAE": "AE",
+}
+_NAMES = sorted(({en: c for c, (_, en) in COUNTRIES.items()} | _ALIASES).items(), key=lambda kv: -len(kv[0]))
+
+
+def guess_country(affiliation):
+    """Best-effort ISO alpha-2 code from ONE affiliation string ('' if unsure).
+
+    Takes the country name that appears LAST in the string (affiliations end with the country),
+    plus 'XX 12345' US state + ZIP. Always a hint for a human to confirm, never ground truth."""
+    import re
+    a = affiliation or ""
+    if not a.strip():
+        return ""
+    best, pos = "", -1
+    for name, code in _NAMES:
+        for m in re.finditer(r"(?<![A-Za-z])" + re.escape(name) + r"(?![A-Za-z])", a):
+            if m.start() > pos:
+                best, pos = code, m.start()
+    if not best and re.search(r"\b[A-Z]{2}\s+\d{5}(-\d{4})?\b", a):
+        best = "US"
+    return best

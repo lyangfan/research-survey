@@ -1,4 +1,4 @@
 # Search helpers, merge/dedup, BibTeX export and build.py use only the Python 3.9+ standard library.
 # Only the screenshot verifier needs Playwright:
 playwright>=1.40
-# then run: python -m playwright install chromium   (or pass --chrome /path/to/chrome)
+# then run: python -m playwright install chromium   (optional: a system Chrome/Chromium is auto-detected, or pass --chrome PATH)

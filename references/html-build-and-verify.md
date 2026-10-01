@@ -17,25 +17,33 @@ python scripts/build.py <data_dir> -o out/survey.html
 | 顶部统计卡 | 自动计数（工作/同行评审/团队/仓库/国家）|
 | 吸顶目录（sticky TOC） | 根据存在的板块自动生成与编号，滚动高亮 |
 | 执行摘要 / 范围与方法 | `narrative/*.html` 原样插入（范围与方法需写明用户指定的时间范围或“未设时间限制”）|
-| 发展路径 | 阶段卡片 + 类别标签筛选时间轴；事件点开显示描述和来源；按半年/年/季度 × 主方向的堆叠柱状图（横轴取 `meta.time_range`；未设时按数据中最早到最晚年份）|
-| 方向分类体系 | ECharts 树图（点击方向 → 跳到代表作表并筛选）+ 方向卡片 |
-| 代表性工作 | 方向标签、状态、年份筛选，关键词搜索，表头排序，同行评审/预印本徽标 |
+| 发展路径 | 阶段卡片 + 类别标签筛选时间轴；事件点开显示描述和来源；按半年/年/季度 × 主方向的堆叠柱状图（横轴取 `meta.time_range`；未设时按数据中最早到最晚年份；未写 `meta.period` 时按跨度自动选粒度）|
+| 方向分类体系 | ECharts 树图（点击方向 → 跳到代表作表并筛选）+ 方向卡片；叶子优先显示 `featured: true` 的里程碑（★），其余按 `meta.tree_sort` 选 |
+| 代表性工作 | 方向标签、状态（含“★ 仅里程碑”）、年份筛选，关键词搜索，表头排序，同行评审/预印本徽标（长文本换行时为圆角矩形），已发表工作附“[预印本]”链接 |
 | 团队与进展 | 地区/类型筛选，进展等级条 |
 | 地区热力图 | 团队数/代表作数切换，点击国家在右侧面板列出团队、方向分布、代表作；各国柱状图（可点击）+ 主要国家方向雷达图 |
-| 开源项目 | Stars 对数条形图（按活跃度着色）、“距最近提交天数 vs Stars”散点、活跃度环图；分类筛选与可展开详情的表格 |
+| 数据门户与资源 | `portals.json`：类型筛选、机构、覆盖范围、访问方式、链接状态（✓/?/✗ + 检查日期，来自 `check_urls.py`）|
+| 开源项目 | Stars 对数条形图（按活跃度着色；长仓库名中间省略、完整名在悬停提示里，标签区自动适应宽度）、“距最近提交天数 vs Stars”散点、活跃度环图；分类筛选与可展开详情的表格（`stable: true` 显示“成熟稳定”）|
 | 挑战与趋势 / 注意事项 | `narrative/*.html` |
 | 参考文献 | 自动汇总 works + timeline + extra_refs + repos 的去重链接 |
 
 改样式：直接编辑 `scripts/template.html` 的 CSS；方向颜色来自 `meta.directions[].color`。所有用户数据在前端经过 HTML 转义，链接只允许 http(s)/mailto。
 
-## 3. 截图验证（必须做）
+## 3. 链接检查
 ```bash
-python -m playwright install chromium          # 或用系统 Chrome：--chrome /usr/bin/google-chrome
+python scripts/check_urls.py <data_dir> --only portals --write   # 门户链接状态写回 portals.json，页面显示
+python scripts/check_urls.py <data_dir> --out url_report.tsv     # 检查全部链接（works/门户/时间轴/团队/extra_refs/仓库）
+```
+HEAD（失败或被拒再 GET）、默认 12 秒超时、跟随跳转；`dead`（404/410/DNS 失败/超时等）让退出码为 1，`blocked`（401/403/429，常见于出版社反爬）需人工打开确认。失效链接写进“注意事项”。
+
+## 4. 截图验证（必须做）
+```bash
+python -m playwright install chromium          # 可选：没有时脚本自动使用系统 Chrome/Chromium（或 --chrome PATH）
 python scripts/screenshot.py out/survey.html --outdir out/screens
 ```
-脚本会：等待页面就绪 → 检查 console error / page error → 检查横向溢出 → 检查每个图表都有非空 canvas → 输出各表格行数和目录 → 截取首屏和每个板块（含点击地图后的面板）。退出码非 0 表示有问题。
+脚本会：等待页面就绪 → 检查 console error / page error → 检查横向溢出 → 检查每个图表都有非空 canvas → 输出各表格行数和目录 → 截取首屏和**所有可见板块**（摘要、范围、时间轴、树图、代表作、团队、地图、门户、仓库、趋势、注意事项、参考文献，含点击地图后的面板）；高度超过视口 1.3 倍的板块另按视口切片（`NN_<id>_p1.png`…，`--max-slices` 控制数量），避免整页长图缩小后看不清。退出码非 0 表示有问题。
 
 **逐张查看截图**，重点确认：
 - 中文正常显示（没有方块/豆腐字）。Linux 无中文字体时安装 `fonts-noto-cjk`。
 - 地图有颜色、右侧面板有内容；柱状图/树图/雷达图/散点图都渲染出来。
-- 表格行数与数据一致；长文本没有撑破布局；窄屏（`--width 390`）下可阅读。
+- 表格行数与数据一致；长文本没有撑破布局；状态标签、Stars 图的仓库名没有被截掉；树图里程碑（★）在；窄屏（`--width 390`）下可阅读。

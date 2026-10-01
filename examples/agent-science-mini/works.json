@@ -10,6 +10,7 @@
   "date": "2024-08",
   "status": "arXiv 预印本 → Nature 2026",
   "peer": false,
+  "featured": true,
   "venue_type": "preprint",
   "venue": "arXiv",
   "authors": [
@@ -38,6 +39,7 @@
   "date": "2025-02",
   "status": "Nature（2026-05-19）",
   "peer": true,
+  "featured": true,
   "venue_type": "journal",
   "venue": "Nature",
   "authors": [
@@ -244,6 +246,7 @@
   "date": "2025-09",
   "status": "Nature（2025-09-23）",
   "peer": true,
+  "featured": true,
   "venue_type": "journal",
   "venue": "Nature",
   "authors": [

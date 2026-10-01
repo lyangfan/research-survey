@@ -8,7 +8,8 @@ Usage
   python scripts/build.py DATA_DIR --world my.geojson # use your own (e.g. officially approved) map
 
 Data folder layout (see references/data-schema.md)
-  meta.json  works.json  teams.json  repos.json  timeline.json  narrative/{summary,scope,challenges,caveats}.html
+  meta.json  works.json  teams.json  repos.json  timeline.json  portals.json (optional)
+  narrative/{summary,scope,challenges,caveats}.html
 
 Third-party assets inlined into the output
   * scripts/vendor/echarts.min.js  Apache ECharts 5.6.0 (Apache-2.0, see vendor/NOTICE-echarts.txt)
@@ -29,6 +30,7 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from countries import COUNTRIES  # noqa: E402
+from common import is_preprint_doi, norm_doi  # noqa: E402
 
 NE_URLS = [
     "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_{res}_admin_0_countries.geojson",
@@ -67,6 +69,10 @@ LABELS = {
   source="来源 ↗", all_ev_cats="全部类别", no_events="无匹配事件", main_challenge="主要难题：",
   see_works="查看该方向代表作 →", tree_click="点击筛选代表作", lic_none="未声明", repo_ref="开源仓库",
   range_since="{start} 起", range_until="截至 {end}",
+  sec_portals="数据门户与资源", desc_portals="数据门户、数据库、在线工具与浏览器（区别于开源代码仓库）。“链接状态”来自 check_urls.py 的检查结果（{checked}）；✗ 表示检查时无法访问。",
+  th_portal="名称", th_kind="类型", th_org="机构", th_scope="覆盖范围/数据", th_access="访问方式", th_url="链接状态", all_kinds="全部类型",
+  url_ok="✓ 可访问", url_dead="✗ 无法访问", url_blocked="? 拒绝脚本访问", url_unchecked="未检查",
+  featured_only="★ 仅里程碑", featured_tip="里程碑/旗舰工作", preprint_link="预印本", act_stable="成熟稳定（低频更新）",
   footer="本报告基于公开资料整理（检查日期 {check}）。“自报”“未核实”等标注请留意；引用时请以原始来源为准。"),
  "en": dict(
   toc="Contents", sec_summary="Executive summary", sec_scope="Scope, method & counting rules", sec_timeline="Timeline",
@@ -96,6 +102,10 @@ LABELS = {
   source="source ↗", all_ev_cats="All categories", no_events="No matching events", main_challenge="Key challenges: ",
   see_works="See works →", tree_click="click to filter works", lic_none="none declared", repo_ref="repository",
   range_since="since {start}", range_until="until {end}",
+  sec_portals="Data portals & resources", desc_portals="Data portals, databases, web tools and browsers (as opposed to code repositories). Link status comes from check_urls.py ({checked}); ✗ = unreachable when checked.",
+  th_portal="Name", th_kind="Type", th_org="Organisation", th_scope="Coverage / data", th_access="Access", th_url="Link status", all_kinds="All types",
+  url_ok="✓ reachable", url_dead="✗ unreachable", url_blocked="? blocks scripts", url_unchecked="not checked",
+  featured_only="★ Landmarks only", featured_tip="landmark / flagship work", preprint_link="preprint", act_stable="Mature (infrequent updates)",
   footer="Compiled from public sources (checked {check}). Mind the 'self-reported' / 'unverified' labels; cite original sources."),
 }
 DEFAULT_LEVELS = {"zh": ["原型/基准", "论文或开源系统", "高影响力发表或实验验证", "产品化/规模化应用"],
@@ -229,7 +239,7 @@ def _outside(date, tr):
     return bool(date) and ((s and date[:len(s)] < s[:len(date)]) or (e and date[:len(e)] > e[:len(date)]))
 
 
-def validate(meta, works, teams, repos, events):
+def validate(meta, works, teams, repos, events, portals=()):
     dk = [d["key"] for d in meta.get("directions", [])]
     if not dk:
         err("meta.directions is empty")
@@ -267,6 +277,15 @@ def validate(meta, works, teams, repos, events):
         seen[key] = tag
         if not w.get("checked"):
             warn(f"{tag}: no 'checked' date")
+        if w.get("peer") and is_preprint_doi(w.get("doi")):
+            warn(f"{tag}: peer=true but doi {w.get('doi')} is a preprint DOI (bioRxiv/medRxiv 10.1101/10.64898 …); "
+                 "use the journal DOI and put the preprint in 'preprint_doi'")
+        if not w.get("peer") and w.get("doi") and not is_preprint_doi(w["doi"]) and re.search(r"预印本|preprint", str(w.get("status")), re.I):
+            warn(f"{tag}: status says preprint but doi {w['doi']} is not a known preprint DOI — published already?")
+        if any(re.fullmatch(r"et\.? ?al\.?|等", str(a).strip(), re.I) for a in (w.get("authors") or [])):
+            warn(f"{tag}: authors contains 'et al.' — list all authors (export turns a literal 'et al.' into BibTeX 'and others')")
+        if w.get("date") and meta.get("check_date") and w["date"] > meta["check_date"]:
+            warn(f"{tag}: date {w['date']} is after check_date (issue date in the future? use the online date)")
     for i, t in enumerate(teams):
         tag = f"teams[{i}] {t.get('name', '?')}"
         for k in ("name", "country", "type", "dirs"):
@@ -288,6 +307,26 @@ def validate(meta, works, teams, repos, events):
             warn(f"{tag}: date {e['date']} is outside the user-specified meta.time_range")
         if phases and e.get("phase") not in phases:
             warn(f"{tag}: phase '{e.get('phase')}' not in meta.phases")
+    for i, p in enumerate(portals):
+        tag = f"portals[{i}] {p.get('name', '?')}"
+        for k in ("name", "url"):
+            if not p.get(k):
+                err(f"{tag}: missing '{k}'")
+        if p.get("url_status") == "dead":
+            warn(f"{tag}: url was unreachable on {p.get('url_checked', '?')} (check_urls.py) — fix the link or say so in the report")
+        elif not p.get("url_checked"):
+            warn(f"{tag}: url not checked yet -> run check_urls.py <data_dir> --only portals --write")
+        for d in as_list(p.get("dirs")):
+            if d not in dk:
+                err(f"{tag}: unknown direction '{d}'")
+    n_leaves = int(meta.get("tree_leaves", 4))
+    for k in dk:
+        nf = sum(1 for w in works if w.get("featured") and k in as_list(w.get("dirs")))
+        if nf > n_leaves:
+            warn(f"direction {k}: {nf} featured works but tree_leaves={n_leaves}; only the first {n_leaves} (by date) are drawn")
+    if works and not any(w.get("featured") for w in works):
+        warn("no work has featured=true: tree leaves are picked automatically "
+             f"(tree_sort={meta.get('tree_sort', 'auto')}); mark landmark/flagship works with \"featured\": true")
     for i, r in enumerate(repos):
         if not r.get("repo") or "/" not in r["repo"]:
             err(f"repos[{i}]: 'repo' must be owner/name")
@@ -295,7 +334,7 @@ def validate(meta, works, teams, repos, events):
             warn(f"repos[{i}] {r.get('repo')}: no stars yet -> run github_repos.py")
 
 
-def derive(meta, works, teams, repos, events, lang):
+def derive(meta, works, teams, repos, events, lang, portals=()):
     L = dict(LABELS.get(lang, LABELS["zh"]))
     L.update(meta.get("labels", {}))
     check = meta.get("check_date") or dt.date.today().isoformat()
@@ -308,6 +347,9 @@ def derive(meta, works, teams, repos, events, lang):
         w.setdefault("country", "")
         w.setdefault("contrib", "")
         w["peer"] = bool(w.get("peer"))
+        w["featured"] = bool(w.get("featured") or w.get("landmark"))
+        if w.get("preprint_doi") and not w.get("preprint_url"):
+            w["preprint_url"] = "https://doi.org/" + norm_doi(w["preprint_doi"])
     for t in teams:
         t["dirs"] = ";".join(as_list(t["dirs"]))
         t["works"] = "; ".join(as_list(t.get("works"))) if isinstance(t.get("works"), list) else t.get("works", "")
@@ -321,6 +363,8 @@ def derive(meta, works, teams, repos, events, lang):
         last = (r.get("last_commit") or r.get("pushed_at") or "")[:10]
         days = (check_d - dt.date.fromisoformat(last)).days if last else 99999
         act = acts[0] if days <= th[0] else acts[1] if days <= th[1] else acts[2] if days <= th[2] else acts[3]
+        # stable=true (hand-set): mature tool, rarely updated on purpose -> not "stale" in the table
+        act_label = L["act_stable"] if r.get("stable") and act == acts[3] else act
         rel = r.get("release") or {}
         if isinstance(rel, list):
             rel = {"tag": rel[0], "date": rel[1]} if rel else {}
@@ -331,6 +375,7 @@ def derive(meta, works, teams, repos, events, lang):
         lic = r.get("license_note") or r.get("license") or L["lic_none"]
         out_repos.append(dict(repo=r.get("canonical") or r["repo"], stars=int(r["stars"]), forks=int(r.get("forks") or 0),
                               license=lic, last=last or "—", days=days, act=act, actIdx=acts.index(act), rel=rel_s,
+                              actLabel=act_label, stable=act_label != act,
                               cat=r.get("cat", "—"), what=r.get("what") or r.get("description", ""),
                               arch=r.get("arch", ""), run=r.get("run", ""), deps=r.get("deps", ""), lim=r.get("lim", ""),
                               archived=bool(r.get("archived"))))
@@ -347,8 +392,17 @@ def derive(meta, works, teams, repos, events, lang):
         add(w.get("title") or w["name"], w["url"], w["status"])
     for e in sorted(events, key=lambda x: x["date"]):
         add(e["title"], e["url"], e["date"])
+    out_portals = []
+    for p in portals:
+        q = dict(p)
+        q["dirs"] = ";".join(as_list(p.get("dirs")))
+        for k in ("kind", "org", "scope", "access", "desc", "note", "url_status", "url_checked", "launched", "works"):
+            q[k] = "; ".join(as_list(q.get(k))) if k == "works" and isinstance(q.get(k), list) else str(q.get(k) or "")
+        out_portals.append(q)
     for x in meta.get("extra_refs", []):
         add(x["title"], x["url"], x.get("note", ""))
+    for p in out_portals:
+        add(p["name"], p["url"], p["kind"] or L["sec_portals"])
     for r in out_repos:
         add("GitHub: " + r["repo"], "https://github.com/" + r["repo"], L["repo_ref"])
 
@@ -369,11 +423,19 @@ def derive(meta, works, teams, repos, events, lang):
     y0 = int(str(tr.get("start", years[0] if years else check[:4]))[:4])
     y1 = int(str(tr.get("end", years[-1] if years else check[:4]))[:4])
     y1 = max(y0, y1)
+    # period: explicit meta.period wins; otherwise pick by the span (long histories -> years)
+    span = y1 - y0 + 1
+    period = meta.get("period") or ("year" if span > 6 else "quarter" if span <= 1 else "half")
+    # taxonomy-tree leaf selection: featured works always first, then tree_sort
+    ts = meta.get("tree_sort", "auto")
+    if ts == "auto":
+        ts = "citations" if any(w.get("citations") for w in works) else ("recent" if tr else "spread")
     levels = meta.get("progress_levels") or DEFAULT_LEVELS.get(lang, DEFAULT_LEVELS["zh"])
     radar = meta.get("radar_countries") or [c for c, _ in cnt_team.most_common(3)]
     data = dict(works=works, teams=teams, events=events, repos=out_repos, dirs=dirs, phases=meta.get("phases", []),
                 cats=cats, names=names, cntTeam=cnt_team, cntWork=cnt_work, refs=refs, L=L, levels=levels,
-                years=[y0, y1], period=meta.get("period", "half"), radar=radar,
+                years=[y0, y1], period=period, radar=radar, treeSort=ts, portals=out_portals,
+                portalsChecked=max((p["url_checked"] for p in out_portals if p["url_checked"]), default=""),
                 taxRoot=meta.get("taxonomy_root") or meta.get("title", ""), topN=int(meta.get("repo_top_n", 30)),
                 treeLeaves=int(meta.get("tree_leaves", 4)), mapCenter=meta.get("map", {}).get("center"),
                 mapZoom=meta.get("map", {}).get("zoom", 1.2))
@@ -393,7 +455,8 @@ def render(d, out, world_arg=None, echarts_arg=None, no_download=False):
     teams = load(d, "teams.json", [])
     repos = load(d, "repos.json", [])
     events = load(d, "timeline.json", [])
-    validate(meta, works, teams, repos, events)
+    portals = load(d, "portals.json", []) if os.path.exists(os.path.join(d, "portals.json")) else []
+    validate(meta, works, teams, repos, events, portals)
     for w in warnings:
         print("[warn]", w)
     if errors:
@@ -404,7 +467,7 @@ def render(d, out, world_arg=None, echarts_arg=None, no_download=False):
         print("[check] data OK")
         return
     lang = meta.get("lang", "zh-CN")[:2]
-    data, L, check, th, levels = derive(meta, works, teams, repos, events, lang)
+    data, L, check, th, levels = derive(meta, works, teams, repos, events, lang, portals)
 
     def narrative(name):
         p = os.path.join(d, "narrative", name + ".html")
@@ -444,6 +507,7 @@ def render(d, out, world_arg=None, echarts_arg=None, no_download=False):
         "FOOTER": meta.get("footer") or L["footer"].format(check=check),
         "DESC_TEAMS": L["desc_teams"].format(levels=lv),
         "DESC_OSS": L["desc_oss"].format(check=check, t0=th[0], t1=th[1], t2=th[2]),
+        "DESC_PORTALS": L["desc_portals"].format(checked=data["portalsChecked"] or L["url_unchecked"]),
     }
     for k, v in L.items():
         if isinstance(v, str):
@@ -459,7 +523,7 @@ def render(d, out, world_arg=None, echarts_arg=None, no_download=False):
                 .replace("/*DATA*/", json.dumps(data, ensure_ascii=False).replace("</", "<\\/")))
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     open(out, "w", encoding="utf-8").write(outh)
-    print(f"[build] works={len(works)} teams={len(teams)} repos={len(data['repos'])} events={len(events)} "
+    print(f"[build] works={len(works)} teams={len(teams)} repos={len(data['repos'])} events={len(events)} portals={len(portals)} "
           f"refs={len(data['refs'])} -> {out} ({len(outh)/1e6:.2f} MB)")
 
 
