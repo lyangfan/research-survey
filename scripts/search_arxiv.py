@@ -11,6 +11,11 @@ or the arxiv.org/abs/<id> page) instead of hammering the API.
 No date filter is applied unless --from/--to are given; pass them only when the user
 explicitly asked for a time range.
 
+Logging: `--query` searches are appended to the search log ($SURVEY_QUERY_LOG / --log) with
+the total hit count; `--ids` / `--titles` verification goes to the separate lookup log
+($SURVEY_LOOKUP_LOG, default verify_lookups.tsv next to the search log). If arXiv keeps
+failing (429/503 after the retries) the records fetched so far are written and the exit code is 2.
+
 Examples
   # keyword search, newest first, no date filter
   python search_arxiv.py --query 'abs:"scientific discovery" AND abs:agent AND cat:cs.AI' \
@@ -25,15 +30,18 @@ Examples
 """
 import argparse
 import re
+import sys
 import time
+import urllib.error
 import xml.etree.ElementTree as ET
 
-from common import http_get, log, write_jsonl, today
+from common import http_get, log, log_lookup, log_query, write_jsonl, today
 
 API = "https://export.arxiv.org/api/query"
 NS = {"a": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom",
       "os": "http://a9.com/-/spec/opensearch/1.1/"}
 _last = [0.0]
+TOTAL = [None]
 
 
 def _call(params):
@@ -73,17 +81,19 @@ def parse(xml):
     return int(total or 0), out
 
 
-def search(query, d_from=None, d_to=None, max_results=100, sort="submittedDate"):
+def search(query, d_from=None, d_to=None, max_results=100, sort="submittedDate", rows=None):
     q = query
     if d_from or d_to:
         f = (d_from or "1991-01-01").replace("-", "") + "0000"
         t = (d_to or "2100-01-01").replace("-", "") + "2359"
         q = f"({q}) AND submittedDate:[{f} TO {t}]"
-    rows, start, page = [], 0, min(100, max_results)
+    rows = [] if rows is None else rows
+    start, page = 0, min(100, max_results)
     while start < max_results:
         total, got = parse(_call({"search_query": q, "start": start, "max_results": page,
                                   "sortBy": sort, "sortOrder": "descending"}))
         rows += got
+        TOTAL[0] = total
         log(f"[arxiv] {len(rows)}/{min(total, max_results)}")
         if not got or start + page >= total:
             break
@@ -91,15 +101,15 @@ def search(query, d_from=None, d_to=None, max_results=100, sort="submittedDate")
     return rows[:max_results]
 
 
-def by_ids(ids):
-    rows = []
+def by_ids(ids, rows=None):
+    rows = [] if rows is None else rows
     for i in range(0, len(ids), 50):
         rows += parse(_call({"id_list": ",".join(ids[i:i + 50]), "max_results": 50}))[1]
     return rows
 
 
-def by_titles(titles):
-    rows = []
+def by_titles(titles, rows=None):
+    rows = [] if rows is None else rows
     for t in titles:
         clean = re.sub(r'["():]', " ", t)
         _, got = parse(_call({"search_query": f'ti:"{clean}"', "max_results": 3}))
@@ -123,12 +133,30 @@ if __name__ == "__main__":
     ap.add_argument("--to", dest="d_to", help="YYYY-MM-DD; optional; no date filter unless given (pass only when the user asked for a time range)")
     ap.add_argument("--max", type=int, default=100)
     ap.add_argument("--sort", default="submittedDate", choices=["submittedDate", "lastUpdatedDate", "relevance"])
+    ap.add_argument("--log", help="--query: search log TSV (default $SURVEY_QUERY_LOG)")
+    ap.add_argument("--lookup-log", help="--ids/--titles: lookup log TSV (default $SURVEY_LOOKUP_LOG or verify_lookups.tsv)")
     ap.add_argument("--out", default="-")
     a = ap.parse_args()
+    res, failed = [], ""
+    try:
+        if a.query:
+            search(a.query, a.d_from, a.d_to, a.max, a.sort, rows=res)
+        elif a.ids:
+            by_ids([x.strip() for x in a.ids.split(",") if x.strip()], rows=res)
+        else:
+            by_titles([l.strip() for l in open(a.titles, encoding="utf-8") if l.strip()], rows=res)
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, ET.ParseError) as e:
+        failed = f"{type(e).__name__}: {e}"
     if a.query:
-        res = search(a.query, a.d_from, a.d_to, a.max, a.sort)
-    elif a.ids:
-        res = by_ids([x.strip() for x in a.ids.split(",") if x.strip()])
-    else:
-        res = by_titles([l.strip() for l in open(a.titles, encoding="utf-8") if l.strip()])
+        res = res[:a.max]
     write_jsonl(a.out, res)
+    if a.query:
+        log_query(a.log, "arxiv", a.query, TOTAL[0], len(res), a.out, sort=a.sort,
+                  date=(f"{a.d_from or ''}..{a.d_to or ''}" if a.d_from or a.d_to else ""), degraded="yes" if failed else "")
+    else:
+        found = sum(1 for r in res if r.get("status") != "not_found")
+        log_lookup(a.lookup_log, "arxiv-" + ("ids" if a.ids else "titles"), a.ids or a.titles, found, a.out)
+    if failed:
+        log(f"[arxiv] WARNING: stopped early ({failed}); kept {len(res)} records. Do not hammer the API: wait, or use "
+            "search_s2.py batch (ARXIV:<id>) / search_openalex.py / the arxiv.org/abs page instead.")
+        sys.exit(2)

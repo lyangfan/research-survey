@@ -18,9 +18,15 @@ Activity labels only measure the last commit. For mature tools that are intentio
 "成熟稳定（低频更新）" instead of "停滞" (charts still use the day count).
 
 Usage
-  python github_repos.py data/repos.json                  # update in place
+  python github_repos.py data/repos.json                  # update in place (all repos)
   python github_repos.py repos.txt --out data/repos.json  # owner/name per line -> new file
   python github_repos.py data/repos.json --html-only      # skip the API
+  # add ONE (or a few) repos to an existing repos.json and fetch only those; hand-written fields
+  # can be given on the command line; an already-listed repo is refreshed instead of duplicated
+  python github_repos.py data/repos.json --add stephenslab/susieR --cat 精细定位 --dirs FM --what "SuSiE fine-mapping (R)"
+  python github_repos.py data/repos.json --add https://github.com/chr1swallace/coloc --add mancusolab/twas_sim --dirs COLOC
+  # refresh only some entries already in the file
+  python github_repos.py data/repos.json --only stephenslab/susieR,chr1swallace/coloc
 """
 import argparse
 import html as H
@@ -32,6 +38,14 @@ import urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
 from common import http_get, log, today
+
+REPO_RE = re.compile(r"^(?:https?://github\.com/|git@github\.com:)?([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?$")
+
+
+def norm_repo(s):
+    """'https://github.com/Owner/Name(.git)' / 'Owner/Name' -> 'Owner/Name' (None if not a repo)."""
+    m = REPO_RE.match((s or "").strip())
+    return m.group(1) if m else None
 
 API = "https://api.github.com"
 
@@ -154,17 +168,50 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("src", help="repos.json (list of objects with 'repo') or .txt (owner/name per line)")
     ap.add_argument("--out", help="output path (default: update src in place if .json)")
+    ap.add_argument("--add", action="append", default=[], metavar="OWNER/NAME",
+                    help="append this repo (owner/name or GitHub URL; repeatable) and fetch only the added ones")
+    ap.add_argument("--only", help="comma-separated owner/name: refresh only these entries")
+    ap.add_argument("--cat", help="with --add: category ('cat') for the new entries")
+    ap.add_argument("--dirs", help="with --add: direction keys, e.g. FM;COLOC")
+    ap.add_argument("--what", help="with --add: one-line description ('what')")
     ap.add_argument("--html-only", action="store_true")
     ap.add_argument("--workers", type=int, default=4)
     a = ap.parse_args()
     if a.src.endswith(".json"):
-        items = json.load(open(a.src, encoding="utf-8"))
+        items = json.load(open(a.src, encoding="utf-8")) if os.path.exists(a.src) else []
     else:
         items = [{"repo": l.strip()} for l in open(a.src) if l.strip() and not l.startswith("#")]
+    targets = None  # None = all
+    if a.add:
+        targets = set()
+        known = {(it.get("repo") or "").lower(): it for it in items}
+        known.update({(it.get("canonical") or "").lower(): it for it in items if it.get("canonical")})
+        for raw in a.add:
+            r = norm_repo(raw)
+            if not r:
+                raise SystemExit(f"--add {raw!r}: expected owner/name or a https://github.com/owner/name URL")
+            it = known.get(r.lower())
+            if it:
+                log(f"  {r}: already in {a.src} -> refreshing it (hand-written fields kept)")
+            else:
+                it = {"repo": r}
+                items.append(it)
+                known[r.lower()] = it
+            for k, v in (("cat", a.cat), ("what", a.what)):
+                if v and not it.get(k):
+                    it[k] = v
+            if a.dirs and not it.get("dirs"):
+                it["dirs"] = [d for d in re.split(r"[;,]\s*", a.dirs) if d]
+            targets.add(it["repo"].lower())
+    if a.only:
+        targets = (targets or set()) | {(norm_repo(x) or x).lower() for x in a.only.split(",") if x.strip()}
+    todo = [it for it in items if targets is None or it["repo"].lower() in targets or (it.get("canonical") or "").lower() in targets]
+    if targets is not None:
+        log(f"fetching {len(todo)} of {len(items)} repos")
     workers = 1 if not a.html_only else a.workers
     with ThreadPoolExecutor(workers) as ex:
-        res = list(ex.map(lambda it: fetch(it["repo"], a.html_only), items))
-    for it, d in zip(items, res):
+        res = list(ex.map(lambda it: fetch(it["repo"], a.html_only), todo))
+    for it, d in zip(todo, res):
         if d.get("status"):
             it["fetch_status"] = d["status"]
             log(f"  {it['repo']}: {d['status']} (moved/deleted? check manually)")

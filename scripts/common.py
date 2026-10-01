@@ -97,12 +97,35 @@ DOI_RE = re.compile(r"(10\.\d{4,9}/[^\s\"<>]+)", re.I)
 # Preprint DOIs. bioRxiv/medRxiv: 10.1101/YYYY.MM.DD.NNNNNN (or old 6-digit 10.1101/NNNNNN) until
 # 2025-11, openRxiv prefix 10.64898/YYYY.MM.DD.NNNNNN from 2025-12-01. NB: plain 10.1101/ is also
 # used by CSHL journals (Genome Res "10.1101/gr.…", Genes Dev "10.1101/gad.…"), so only the
-# numeric/date-shaped suffix counts. Others: Research Square, Preprints.org, ChemRxiv, SSRN, OSF.
-PREPRINT_DOI_RE = re.compile(
-    r"^(10\.1101/(\d{4}\.\d{2}\.\d{2}\.)?\d{6,}"
-    r"|10\.64898/"
-    r"|10\.21203/rs\.|10\.20944/preprints|10\.26434/chemrxiv|10\.2139/ssrn|10\.31219/osf\.io|10\.48550/arxiv\.)", re.I)
+# numeric/date-shaped suffix counts. Only REAL preprint-server prefixes are listed (a journal DOI is
+# never a preprint, whatever an index's flags say): Research Square, Preprints.org, ChemRxiv /
+# Cambridge Open Engage, SSRN, Center for Open Science servers (OSF, PsyArXiv, SocArXiv, EarthArXiv,
+# engrXiv, MetaArXiv … 10.31219-10.31237), EdArXiv, arXiv, Authorea / ESS Open Archive, Qeios,
+# TechRxiv, JMIR Preprints, SciELO Preprints, PeerJ Preprints, ScienceOpen Preprints, EGUsphere.
+PREPRINT_DOI_PREFIXES = [
+    (r"10\.1101/(\d{4}\.\d{2}\.\d{2}\.)?\d{6,}", "bioRxiv"), (r"10\.64898/", "bioRxiv"),
+    (r"10\.21203/rs\.", "Research Square"), (r"10\.20944/preprints", "Preprints.org"),
+    (r"10\.26434/chemrxiv", "ChemRxiv"), (r"10\.33774/", "Cambridge Open Engage"), (r"10\.2139/ssrn", "SSRN"),
+    (r"10\.31234/", "PsyArXiv"), (r"10\.31235/", "SocArXiv"), (r"10\.31223/", "EarthArXiv"),
+    (r"10\.31224/", "engrXiv"), (r"10\.31222/", "MetaArXiv"), (r"10\.312(19|2\d|3[0-7])/", "OSF Preprints"),
+    (r"10\.35542/", "EdArXiv"), (r"10\.48550/arxiv\.", "arXiv"), (r"10\.22541/essoar\.", "ESS Open Archive"),
+    (r"10\.1002/essoar\.", "ESS Open Archive"), (r"10\.22541/", "Authorea"), (r"10\.32388/", "Qeios"),
+    (r"10\.36227/techrxiv", "TechRxiv"), (r"10\.2196/preprints\.", "JMIR Preprints"),
+    (r"10\.1590/scielopreprints", "SciELO Preprints"), (r"10\.7287/peerj\.preprints", "PeerJ Preprints"),
+    (r"10\.14293/s2199-1006\.1\.sor-", "ScienceOpen Preprints"), (r"10\.5194/egusphere", "EGUsphere"),
+]
+PREPRINT_DOI_RE = re.compile("^(" + "|".join(p for p, _ in PREPRINT_DOI_PREFIXES) + ")", re.I)
 RXIV_DOI_RE = re.compile(r"^(10\.1101/(\d{4}\.\d{2}\.\d{2}\.)?\d{6,}|10\.64898/)", re.I)
+# venue / publisher strings that name a preprint server (used only when a record has no DOI, or
+# a DOI with an unknown prefix that its own source flags as a preprint)
+PREPRINT_SERVER_RE = re.compile(
+    r"arxiv|biorxiv|medrxiv|ssrn|research ?square|preprints\.org|chemrxiv|authorea|qeios|techrxiv|psyarxiv|"
+    r"socarxiv|eartharxiv|engrxiv|edarxiv|metaarxiv|osf preprints|scielo preprints|jmir preprints|peerj preprints|"
+    r"essoar|ess open archive|egusphere|scienceopen preprints|^preprint$", re.I)
+PREPRINT_SERVER_NAMES = ("medRxiv", "bioRxiv", "ChemRxiv", "SSRN", "Research Square", "Preprints.org", "arXiv",
+                         "Authorea", "Qeios", "TechRxiv", "PsyArXiv", "SocArXiv", "EarthArXiv", "engrXiv",
+                         "EdArXiv", "MetaArXiv", "OSF Preprints", "SciELO Preprints", "JMIR Preprints",
+                         "PeerJ Preprints", "ESS Open Archive", "EGUsphere")
 
 
 def norm_arxiv(s):
@@ -130,25 +153,26 @@ def is_rxiv_doi(doi):
 
 
 def preprint_server(doi="", venue="", url=""):
-    """Best-effort preprint server name from DOI / venue / URL ('' when not a preprint)."""
+    """Best-effort preprint server name from DOI / venue / URL ('' when not a preprint).
+
+    A DOI with a known preprint prefix decides; a non-preprint (journal) DOI is never a preprint,
+    whatever the venue text says (Semantic Scholar sometimes reports venue "bioRxiv" for the
+    published article). Venue/URL text is only used when there is no DOI."""
     d, t = norm_doi(doi), f"{venue} {url}".lower()
-    for name in ("medRxiv", "bioRxiv", "ChemRxiv", "SSRN", "Research Square", "Preprints.org", "arXiv", "OSF"):
-        if name.lower() in t:
-            return name
+    if d and not is_preprint_doi(d):
+        return ""
     if is_rxiv_doi(d):
         return "medRxiv" if "medrxiv" in t else "bioRxiv"
-    if d.startswith("10.48550/arxiv.") or norm_arxiv(url) and "arxiv" in t:
-        return "arXiv"
-    if d.startswith("10.21203/rs."):
+    for pat, name in PREPRINT_DOI_PREFIXES:
+        if d and re.match(pat, d, re.I):
+            return name
+    for name in PREPRINT_SERVER_NAMES:
+        if name.lower() in t:
+            return name
+    if "research square" in t or "researchsquare" in t:
         return "Research Square"
-    if d.startswith("10.20944/preprints"):
-        return "Preprints.org"
-    if d.startswith("10.26434/chemrxiv"):
-        return "ChemRxiv"
-    if d.startswith("10.2139/ssrn"):
-        return "SSRN"
-    if d.startswith("10.31219/osf.io"):
-        return "OSF"
+    if norm_arxiv(url) and "arxiv" in t:
+        return "arXiv"
     return ""
 
 
@@ -204,7 +228,9 @@ def parse_author(name):
     if len(toks) == 1:
         return dict(kind="person", last=toks[0], first="", suffix=suffix, raw=n)
     # PubMed style: last token is 1-3 capital letters (initials), the rest is the surname
-    if re.fullmatch(r"[A-Z\u00C0-\u00DE]{1,3}(-[A-Z])?", toks[-1]) and re.search(r"[a-z\u00DF-\u00FF]", " ".join(toks[:-1])):
+    ini_tok = toks[-1].replace("-", "")
+    if (1 <= len(ini_tok) <= 3 and ini_tok.isalpha() and ini_tok.isupper() and re.fullmatch(r"[^\W\d_]{1,3}(-[^\W\d_])?", toks[-1])
+            and any(c.islower() for c in " ".join(toks[:-1]))):
         ini = toks[-1].replace("-", "")
         return dict(kind="person", last=" ".join(toks[:-1]), first=" ".join(c + "." for c in ini), suffix=suffix, raw=n)
     # natural order; keep lowercase particles (van der, de, von) with the surname
@@ -227,6 +253,14 @@ def author_surname(name):
 
 def norm_title(s):
     return re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", (s or "").lower())
+
+
+def surname_key(name):
+    """Accent-free lower-case surname for fuzzy author matching ("Avsec Ž", "Avsec, Z.", "Žiga Avsec" -> "avsec")."""
+    import unicodedata
+    s = author_surname(name)
+    s = unicodedata.normalize("NFKD", s)
+    return re.sub(r"[^a-z]", "", "".join(c for c in s if not unicodedata.combining(c)).lower())
 
 
 def dedup_key(rec):
@@ -266,21 +300,47 @@ def today():
     return time.strftime("%Y-%m-%d")
 
 
-def log_query(path, source, query, hits=None, retrieved=None, out=None, **extra):
-    """Append one line per executed query to a TSV search log (for the report's 'scope & method').
-
-    path: explicit --log value, else $SURVEY_QUERY_LOG, else nothing is written.
-    Columns: time (local, with UTC offset), source, query (verbatim), total hits, retrieved,
-    output file, extra key=value pairs (filters etc.)."""
-    path = path or os.environ.get("SURVEY_QUERY_LOG")
-    if not path:
-        return
+def _write_log(path, source, query, hits, retrieved, out, extra):
     new = not os.path.exists(path)
     with open(path, "a", encoding="utf-8") as f:
         if new:
             f.write("time\tsource\tquery\thits\tretrieved\tout\textra\n")
         ex = " ".join(f"{k}={v}" for k, v in extra.items() if v not in (None, ""))
         f.write("\t".join(str(x if x is not None else "") for x in (
-            time.strftime("%Y-%m-%d %H:%M:%S%z"), source, query.replace("\t", " ").replace("\n", " "),
+            time.strftime("%Y-%m-%d %H:%M:%S%z"), source, str(query).replace("\t", " ").replace("\n", " "),
             hits, retrieved, out or "-", ex)) + "\n")
+
+
+def log_query(path, source, query, hits=None, retrieved=None, out=None, **extra):
+    """Append one line per executed SEARCH to a TSV search log (for the report's 'scope & method').
+
+    path: explicit --log value, else $SURVEY_QUERY_LOG, else nothing is written.
+    Columns: time (local, with UTC offset), source, query (verbatim), total hits, retrieved,
+    output file, extra key=value pairs (filters etc.).
+    Single-record verification lookups (DOI / ID / title checks) must NOT go here: use
+    log_lookup(), which writes a separate file so the search log only lists real searches."""
+    path = path or os.environ.get("SURVEY_QUERY_LOG")
+    if not path:
+        return
+    _write_log(path, source, query, hits, retrieved, out, extra)
     log(f"[log] query appended to {path}")
+
+
+def lookup_log_path(path=None):
+    """Where verification lookups go: explicit path, else $SURVEY_LOOKUP_LOG, else
+    'verify_lookups.tsv' next to $SURVEY_QUERY_LOG (None when neither is set)."""
+    if path:
+        return path
+    if os.environ.get("SURVEY_LOOKUP_LOG"):
+        return os.environ["SURVEY_LOOKUP_LOG"]
+    q = os.environ.get("SURVEY_QUERY_LOG")
+    return os.path.join(os.path.dirname(os.path.abspath(q)), "verify_lookups.tsv") if q else None
+
+
+def log_lookup(path, source, query, found=None, out=None, **extra):
+    """Append a single-record verification lookup (DOI / ID / title check) to the LOOKUP log,
+    kept apart from the search log (see lookup_log_path)."""
+    path = lookup_log_path(path)
+    if not path:
+        return
+    _write_log(path, source, query, found, found, out, dict(extra, kind="lookup"))

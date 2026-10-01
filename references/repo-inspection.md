@@ -3,6 +3,8 @@
 ## 1. 找仓库
 - 论文首页/摘要中的 “Code: github.com/…” 链接、项目主页、Hugging Face Papers 关联代码、GitHub 搜索（`topic:`、`in:readme`）、awesome-list。
 - 同名仓库要核对 owner 与论文作者是否一致；官方仓库与社区复现要区分标注。
+- **追加单个仓库**：`python scripts/github_repos.py data/repos.json --add owner/name [--add https://github.com/o/r] --cat 类别 --dirs FM,COLOC --what "一句话"`——只抓取新增的条目并合并进原文件；已在文件里的会刷新（保留手写字段）而不会重复。只刷新部分条目：`--only owner/a,owner/b`。
+- **反向利用**：仓库 README 的 Citation 段、`CITATION.cff`、R 包 `inst/CITATION` 列出的论文正是该工具的方法论文，用 `python scripts/snowball.py repo-cites @data/repos.json --out sb_repo.jsonl` 收集，作为文献检索的一个来源（`found_via: repo-cite:<owner/repo>`，见 `literature-search.md` §1b）。
 
 ## 2. 抓取字段（GitHub REST API）
 | 字段 | 端点 / 字段名 | 用途 |

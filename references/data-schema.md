@@ -38,7 +38,9 @@
 | `activity_thresholds` | | 默认 `[30,90,365]` 天 |
 | `radar_countries` | | 雷达图对比的国家，默认团队数前三 |
 | `repo_top_n` / `tree_leaves` | | Stars 图条数（默认 30）/ 树图每个方向的叶子数（默认 4）|
-| `tree_sort` | | 树图叶子怎么选（`featured: true` 的作品**总是优先**）：`auto`（默认：works 有 `citations` 就按被引数；否则未设时间范围时用 `spread`，设了时间范围用 `recent`）/ `citations` / `spread`（同行评审作品按时间均匀取样，早期里程碑与近期工作都在）/ `recent`（同行评审优先、最新优先）|
+| `tree_sort` | | 树图里补位的普通叶子怎么选（主方向的 `featured: true` 作品**总是先放**）：`auto`（默认：works 有 `citations` 就按被引数；否则未设时间范围时用 `spread`，设了时间范围用 `recent`）/ `citations` / `spread`（同行评审作品按时间均匀取样，早期里程碑与近期工作都在）/ `recent`（同行评审优先、最新优先）|
+| `tree_cross` | | `fill`（默认）= 本方向主方向作品不够 `tree_leaves` 时，用交叉标注（`dirs` 里有该方向但不是第一个）的作品补空位，显示为虚线灰色叶子；`none` = 不补 |
+| `tree_featured_overflow` | | `show`（默认）= 主方向里程碑超过 `tree_leaves` 也全部画出；`cap` = 最多画 `tree_leaves` 个（按日期），其余计入“+N 篇”叶子 |
 | `map` | | `{"resolution":"110m"|"50m","merge":{"TW":"CN"},"drop":["AQ"],"zoom":1.2,"center":[lon,lat],"geojson":"path"}` |
 | `country_names` | | 覆盖国家显示名 `{ "HK": "中国香港" }` |
 | `extra_refs` | | `[{title,url,note}]` 额外参考资料（博客、新闻）|
@@ -69,19 +71,21 @@
 |---|---|---|
 | `name` | ✔ | 表格中显示的简称（可中文）|
 | `title` | | 原文完整标题（用于 BibTeX 与悬停提示）|
-| `dirs` | ✔ | 方向键列表 `["IDEA","LIT"]`，**第一个为主方向**（柱状图按主方向计）|
+| `dirs` | ✔ | 方向键列表 `["IDEA","LIT"]`，**第一个为主方向**（柱状图、树图里程碑按主方向计）|
+| `primary_dir` | | 可选，显式指定主方向（覆盖 `dirs` 第一个；不在 `dirs` 里时自动加入并提示）|
 | `inst` | | 机构（第一/主导机构在前，`/` 分隔）；查不到写 `—（未核实）` |
 | `country` | | 第一或主导机构国家代码；未核实留空（不计入地图）|
-| `date` | ✔ | **首次公开日期**：预印本日期优先，否则期刊**在线**日期（不是纸质刊期；可用 `search_crossref.py doi` 的 `date_online` 核对）|
+| `date` | ✔ | **首次公开日期**：预印本 **v1** 日期优先（`search_biorxiv.py doi` 的 `date`），否则期刊**在线**日期（不是纸质刊期；可用 `search_crossref.py doi` 的 `date_online` 核对）|
 | `status` | ✔ | 发表状态文字，如 `ICLR 2025`、`arXiv 预印本`、`Nature（2025-09-23）` |
 | `peer` | ✔ | 是否同行评审（bool）|
 | `venue_type` | | `journal|conference|preprint|blog|product|report`（导出 BibTeX/RIS 用）|
 | `venue` | | 规范 venue 名 |
 | `authors` | | **全部**作者（导出用），不要截断成 “et al.”。“Smith AB”（PubMed）、“Smith, Anna B.”、“Anna B. Smith” 均可；联盟作者写原名（如 `GTEx Consortium`），导出为单个机构作者 |
 | `corporate_author` | | 字符串或列表：作为机构作者放在作者列表最前（如 `"FarmGTEx Consortium"`），已在 `authors` 中的不重复 |
-| `featured` | | `true` = 里程碑/旗舰工作：树图优先显示（每个方向不超过 `tree_leaves` 个）、名称前加 ★、可用“★ 仅里程碑”筛选 |
+| `featured` | | `true` = 里程碑/旗舰工作：在**主方向**的树枝上一定显示（见 `tree_featured_overflow`）、名称前加 ★、可用“★ 仅里程碑”筛选 |
 | `doi` / `arxiv` | | 标识符（去重、导出、Zotero 魔棒）；已发表的工作写**正式版** DOI |
-| `preprint_doi` / `preprint_url` | | 已发表工作对应的预印本（bioRxiv `10.1101/…` / `10.64898/…` 等）；表格显示“[预印本]”链接，导出写进 note。`merge_dedup.py` 会自动填 |
+| `preprint_doi` / `preprint_url` / `preprint_date` | | 已发表工作对应的预印本（bioRxiv `10.1101/…` / `10.64898/…`、Research Square 等）及其 v1 日期；表格显示“[预印本]”链接，导出写进 note。`merge_dedup.py` 会自动填（另有 `preprint_server`、`preprint_dois`、`link_method`，可保留也可删）|
+| `found_via` | 建议 | 这条工作是哪些检索策略找到的，列表：`kw:<source>`（关键词检索）、`name`（具名检索）、`snowball:refs` / `snowball:cites`、`repo-cite:<owner/repo>`、`page:<host>`、`must`（必收清单）、`manual`（手工补充）。`merge_dedup.py --works-draft` 自动带出；`build.py` 打印汇总，`recall_check.py coverage` 据此出各方向来源构成表 |
 | `pmid` / `citations` | | PubMed ID / 被引数（带抓取日期写进 note；`tree_sort: citations` 用）|
 | `url` | ✔ | 可点击链接 |
 | `contrib` | | 一句话核心贡献（中文）|
@@ -128,4 +132,4 @@
 
 ## 候选记录（JSONL，检索脚本的输出）
 
-`{source,title,authors,date,venue,doi,arxiv,pmid,url,abstract,citations,checked,...}` —— 生命科学脚本另有 `affiliation`、`country_guess`（仅提示，需人工确认）、`mesh`、`date_print`/`date_epub`；`merge_dedup.py` 合并后再加 `sources`、`status_guess`、`venue_guess`、`preprint_doi`。
+`{source,title,authors,date,venue,doi,arxiv,pmid,url,abstract,citations,checked,...}` —— 生命科学脚本另有 `affiliation`、`country_guess`（仅提示，需人工确认）、`mesh`、`date_print`/`date_epub`；`merge_dedup.py` 合并后再加 `sources`、`status_guess`、`venue_guess`、`found_via`，以及预印本合并字段 `preprint_doi`/`preprint_url`/`preprint_date`/`preprint_server`/`preprint_dois`/`link_method`（疑似未合并的在 `possible_published`）。Crossref 记录有 `is_preprint_of`/`has_preprint`，bioRxiv `doi` 模式有 `date_v1`/`date_latest`/`versions`/`published`，Europe PMC 有 `published_pmid`/`preprint_epmc_ids`，`snowball.py` 输出有 `seeds`/`seed_count`，OpenAlex 的 Crossref 回退记录有 `fallback_for`。

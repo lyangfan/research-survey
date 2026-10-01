@@ -118,7 +118,7 @@ tr:hover td{background:#fafbff}
 .odc{border:1px solid var(--line);border-left:4px solid var(--c);border-radius:10px;padding:9px 12px;background:#fff;font-size:13px;min-width:0;overflow-wrap:anywhere}
 .odc.clk{cursor:pointer}.odc.clk:hover{border-color:var(--c)}.odc.on{box-shadow:0 0 0 2px var(--c)}
 .odc b{font-size:13.5px}.odc .n{color:var(--muted);font-size:12.5px;margin-left:4px}
-.odc.nr{background:#f8fafc}.odc .nrn{margin:4px 0 0;color:#475569;font-size:12.5px;line-height:1.6}
+.odc.nr{background:#f8fafc;grid-column:1/-1}.odc.nr ul{columns:2 260px;column-gap:28px}.odc.nr li{break-inside:avoid}.odc .nrn{margin:4px 0 0;color:#475569;font-size:12.5px;line-height:1.6}
 .odc ul{margin:4px 0 0;padding-left:16px;font-size:12.5px}.odc li{margin:2px 0}
 .tag.nrb{background:#f1f5f9;color:#475569;font-size:11px}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px}
@@ -267,47 +267,92 @@ if(has.events)renderTL();
  const lab=b=>per==='half'?b.replace('H1',' '+L.h1).replace('H2',' '+L.h2):b;
  document.getElementById('c-period-title').textContent=L.chart_period.replace('{period}',L['period_'+per]||per);
  if(!has.works){document.getElementById('c-half').classList.add('hidden');return}
- const series=DK.map(k=>{const arr=bins.map(()=>0);W.forEach(w=>{if(dl(w.dirs)[0]===k){const i=idx(w.date);if(i>=0)arr[i]++}});return{name:DIRS[k].short,type:'bar',stack:'a',data:arr,itemStyle:{color:DC[k]},emphasis:{focus:'series'}}});
+ const series=DK.map(k=>{const arr=bins.map(()=>0);W.forEach(w=>{if(w.primary===k){const i=idx(w.date);if(i>=0)arr[i]++}});return{name:DIRS[k].short,type:'bar',stack:'a',data:arr,itemStyle:{color:DC[k]},emphasis:{focus:'series'}}});
  mk('c-half').setOption({textStyle,tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},legend:{top:0,type:'scroll'},grid:{left:40,right:20,top:48,bottom:30},xAxis:{type:'category',data:bins.map(lab)},yAxis:{type:'value',name:L.count_axis,minInterval:1},series});
 })();
 
 // ---------- taxonomy tree ----------
 (function(){
- const n=DATA.treeLeaves,TS=DATA.treeSort;
- // featured (landmark/flagship) works always first; the rest by tree_sort:
- // citations = most cited, recent = peer-reviewed newest, spread = peer-reviewed spaced evenly over time
- function pick(ws){
-  const f=ws.filter(w=>w.featured).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,n),k=n-f.length;
-  let rest=ws.filter(w=>!w.featured),out=[];
-  if(k>0&&rest.length){
-   if(TS==='citations')out=rest.sort((a,b)=>((b.citations||0)-(a.citations||0))||(b.peer-a.peer)||a.date.localeCompare(b.date)).slice(0,k);
-   else if(TS==='recent')out=rest.sort((a,b)=>(b.peer-a.peer)||b.date.localeCompare(a.date)).slice(0,k);
-   else{const pool=(rest.filter(w=>w.peer).length>=k?rest.filter(w=>w.peer):rest).sort((a,b)=>a.date.localeCompare(b.date));
-    if(pool.length<=k)out=pool;else{const ix=new Set();for(let i=0;i<k;i++)ix.add(k===1?0:Math.round(i*(pool.length-1)/(k-1)));out=[...ix].map(i=>pool[i])}}
-  }
-  return f.concat(out).sort((a,b)=>a.date.localeCompare(b.date));
+ const n=DATA.treeLeaves,TS=DATA.treeSort,CROSS=DATA.treeCross,OVF=DATA.treeOverflow;
+ const byDate=(a,b)=>a.date.localeCompare(b.date);
+ // up to k works from a pool by tree_sort: citations = most cited, recent = peer-reviewed newest,
+ // spread = peer-reviewed spaced evenly over time
+ function sortPick(pool0,k){
+  if(k<=0||!pool0.length)return[];
+  const rest=pool0.slice();
+  if(TS==='citations')return rest.sort((a,b)=>((b.citations||0)-(a.citations||0))||(b.peer-a.peer)||byDate(a,b)).slice(0,k);
+  if(TS==='recent')return rest.sort((a,b)=>(b.peer-a.peer)||b.date.localeCompare(a.date)).slice(0,k);
+  const pool=(rest.filter(w=>w.peer).length>=k?rest.filter(w=>w.peer):rest).sort(byDate);
+  if(pool.length<=k)return pool;const ix=new Set();for(let i=0;i<k;i++)ix.add(k===1?0:Math.round(i*(pool.length-1)/(k-1)));return[...ix].map(i=>pool[i]);
  }
- // width-aware truncation: CJK characters count double, so Chinese and English labels end at a similar width
+ // Leaf rule (documented in references/taxonomy-and-teams.md):
+ //  1. featured works whose PRIMARY direction (primary_dir, else first of dirs) is this one, all of them,
+ //     even beyond tree_leaves (tree_featured_overflow:"cap" truncates them to tree_leaves instead);
+ //  2. free slots up to tree_leaves: this direction's own non-featured works (by tree_sort);
+ //  3. still free (tree_cross:"fill", default): cross-tagged works, featured first; never with tree_cross:"none";
+ //  4. a final "+N" leaf counts the direction's works not drawn (click -> works table filtered to it).
+ function pick(k){
+  const all=W.filter(w=>dl(w.dirs).includes(k)),own=all.filter(w=>w.primary===k),cross=all.filter(w=>w.primary!==k);
+  let out=own.filter(w=>w.featured).sort(byDate);if(OVF==='cap')out=out.slice(0,n);
+  out=out.concat(sortPick(own.filter(w=>!w.featured),n-out.length));
+  if(CROSS!=='none'&&out.length<n){const cf=cross.filter(w=>w.featured).sort(byDate).slice(0,n-out.length);out=out.concat(cf,sortPick(cross.filter(w=>!w.featured),n-out.length-cf.length))}
+  return{ws:out.sort(byDate),hidden:all.length-out.length};
+ }
  const short=s=>{let w=0,o='';for(const ch of s){w+=/[\u2e80-\uffff]/.test(ch)?2:1;if(w>40)return o+'…';o+=ch}return o};
- const children=DK.map(k=>{const ws=pick(W.filter(w=>dl(w.dirs).includes(k)));
-  return{name:DIRS[k].name,dk:k,itemStyle:{color:DC[k],borderColor:DC[k]},label:{color:'#111',fontWeight:'bold'},children:ws.map(w=>({name:(w.featured?'★ ':'')+short(w.name),full:w.name,status:w.status+(w.featured?' · ★ '+L.featured_tip:''),itemStyle:{color:w.featured?DC[k]:'#fff',borderColor:DC[k]}}))}});
- const leaves=children.reduce((s,c)=>s+Math.max(1,c.children.length),0);
- const el=document.getElementById('c-tree');el.style.height=Math.max(360,leaves*26+40)+'px';
- const c=mk('c-tree');
- // width-aware layout: margins come from measured label widths, labels are capped so nothing runs off the
- // canvas or into a neighbour at narrow widths (leaves truncate with …, full name in the tooltip; direction names wrap)
+ const el=document.getElementById('c-tree');
  const cx=document.createElement('canvas').getContext('2d');
  const tw=(s,px,b)=>{cx.font=(b?'bold ':'')+px+'px '+textStyle.fontFamily;return Math.max(0,...String(s).split('\n').map(x=>cx.measureText(x).width))};
- const rootW=tw(DATA.taxRoot,15,true)+20,leafMax=Math.max(40,...children.flatMap(d=>d.children.map(x=>tw(x.name,12)))),dirMax=Math.max(40,...children.map(d=>tw(d.name,12.5,true)));
+ // line-wrap a direction name ourselves: break between words / CJK characters, keep an opening bracket with the
+ // next unit and closing punctuation with the previous one, so a lone ")" never ends up on its own line
+ const OPEN='([{（［【「『《〈“‘',CLOSE=')]}）］】」』》〉”’,，.。:：;；!！?？、%％·';
+ const WORD=/[A-Za-z0-9\-\/+.&'_]/;
+ function units(s){const t=[],a=[...s];let i=0;
+  while(i<a.length){if(WORD.test(a[i])){let w='';while(i<a.length&&WORD.test(a[i]))w+=a[i++];t.push(w)}else t.push(a[i++])}
+  const g=[];
+  for(const x of t){const last=g.length?g[g.length-1]:'';
+   if(last&&(CLOSE.includes(x)||x===' '))g[g.length-1]+=x;else if(last&&OPEN.includes(last.slice(-1)))g[g.length-1]+=x;else g.push(x)}
+  return g}
+ function wrap(s,maxW,px,b){return String(s).split('\n').map(line=>{const out=[];let cur='';
+  for(const u of units(line)){const c2=cur+u;if(cur&&tw(c2.trimEnd(),px,b)>maxW){out.push(cur.trimEnd());cur=u.trimStart()}else cur=c2}
+  if(cur)out.push(cur.trimEnd());return out.join('\n')}).join('\n')}
+ const picks=DK.map(k=>[k,pick(k)]);
+ const leafName=w=>(w.featured?'★ ':'')+short(w.name);
+ const rootW=tw(DATA.taxRoot,15,true)+20,leafMax=Math.max(40,...picks.flatMap(([k,p])=>p.ws.map(w=>tw(leafName(w),12)))),dirMax=Math.max(40,...DK.map(k=>tw(DIRS[k].name,12.5,true)));
+ // narrow screens (<520px): the root label (= report topic, shown in the page title anyway) is hidden to give the
+ // direction names room; hover the root node for it
+ function geom(w){const narrow=w<520,leafW=Math.min(leafMax,Math.max(90,w*(narrow?0.33:0.36))),left=narrow?16:Math.min(rootW+16,w*0.3),right=leafW+22;
+  return{narrow,leafW,left,right,dirW:Math.max(56,Math.min(dirMax,(w-left-right)/2-18))}}
+ // height: ECharts spaces leaves evenly (gap 1 between siblings, 2 between branches), so a branch with n leaves gets
+ // about n+1 gaps of vertical room; size the gap so every (wrapped) direction name fits, else names overlap on narrow screens
+ function treeH(w){const g=geom(w),ns=picks.map(([k,p])=>Math.max(1,p.ws.length+(p.hidden?1:0))),N=ns.reduce((a,b)=>a+b,0),D=ns.length;
+  const span=Math.max(1,N+D-2);let u=26*N/span;
+  picks.forEach(([k],i)=>{u=Math.max(u,(wrap(DIRS[k].name,g.dirW,12.5,true).split('\n').length*16+8)/(ns[i]+1))});
+  return Math.max(360,Math.round(u*span+40))}
+ el.style.height=treeH(el.clientWidth||800)+'px';
+ const c=mk('c-tree');  // after the height is set, so the chart gets the full canvas
+ function leaf(x,k){const cr=x.primary!==k;
+  return{name:leafName(x),full:x.name,
+   status:x.status+(x.featured?' · ★ '+L.featured_tip:'')+(cr?' · '+L.tree_cross_tip.replace('{dir}',(DIRS[x.primary]||{}).short||x.primary):''),
+   itemStyle:{color:x.featured&&!cr?DC[k]:'#fff',borderColor:DC[k],borderType:cr?'dashed':'solid'},label:cr?{color:'#6b7280'}:undefined}}
+ const moreLeaf=(k,h)=>({name:L.tree_more.replace('{n}',h),more:k,itemStyle:{color:'#e2e8f0',borderColor:'#64748b',borderType:'dotted'},label:{color:'#64748b',fontStyle:'italic'}});
  function layoutTree(){
-  const w=el.clientWidth||800,leafW=Math.min(leafMax,Math.max(90,w*0.36)),left=Math.min(rootW+16,w*0.3),right=leafW+22;
-  const dirW=Math.max(56,Math.min(dirMax,(w-left-right)/2-18));
-  c.setOption({textStyle,tooltip:{trigger:'item',formatter:p=>p.data.full?`<b>${esc(p.data.full)}</b><br>${esc(p.data.status)}`:(p.data.dk?`<b>${esc(p.name)}</b><br>${esc(DIRS[p.data.dk].en)}<br>${L.tree_click}`:esc(p.name))},
-   series:[{type:'tree',data:[{name:DATA.taxRoot,itemStyle:{color:'#4f46e5'},label:{fontSize:15,fontWeight:'bold',color:'#fff',backgroundColor:'#4f46e5',padding:[8,10],borderRadius:8,width:null,overflow:'none'},children}],top:10,left,bottom:10,right,symbolSize:11,initialTreeDepth:2,expandAndCollapse:false,
-    label:{position:'left',verticalAlign:'middle',align:'right',fontSize:12.5,width:dirW,overflow:'break',lineHeight:16},leaves:{label:{position:'right',align:'left',color:'#374151',fontSize:12,width:leafW,overflow:'truncate',ellipsis:'…'}},lineStyle:{color:'#c7d2fe',width:1.4,curveness:.5},animationDuration:500}]});
+  const w=el.clientWidth||800,{narrow,leafW,left,right,dirW}=geom(w);
+  const rootTxt=wrap(DATA.taxRoot,Math.max(48,left-26),15,true);
+  // the node name stays the plain direction name (ECharts matches nodes by name on re-layout; a changed name
+  // would remove + re-add the node and leave a fading ghost label); the wrapped text comes from the formatter
+  const children=picks.map(([k,p])=>{const wn=wrap(DIRS[k].name,dirW,12.5,true);return{name:DIRS[k].name,dk:k,itemStyle:{color:DC[k],borderColor:DC[k]},label:{color:'#111',fontWeight:'bold',formatter:()=>wn},
+   children:p.ws.map(x=>leaf(x,k)).concat(p.hidden?[moreLeaf(k,p.hidden)]:[])}});
+  const tip=p=>p.data.more?esc(L.tree_more_tip):p.data.full?`<b>${esc(p.data.full)}</b><br>${esc(p.data.status)}`:(p.data.dk?`<b>${esc(DIRS[p.data.dk].name)}</b><br>${esc(DIRS[p.data.dk].en)}<br>${L.tree_click}`:esc(p.name));
+  c.setOption({textStyle,tooltip:{trigger:'item',formatter:tip},
+   series:[{type:'tree',data:[{name:DATA.taxRoot,itemStyle:{color:'#4f46e5'},label:{show:!narrow,formatter:()=>rootTxt,lineHeight:19,fontSize:15,fontWeight:'bold',color:'#fff',backgroundColor:'#4f46e5',padding:[8,10],borderRadius:8,width:null,overflow:'none'},children}],top:10,left,bottom:10,right,symbolSize:11,initialTreeDepth:2,expandAndCollapse:false,
+    label:{position:'left',verticalAlign:'middle',align:'right',fontSize:12.5,lineHeight:16,overflow:'none'},leaves:{label:{position:'right',align:'left',color:'#374151',fontSize:12,width:leafW,overflow:'truncate',ellipsis:'…'}},lineStyle:{color:'#c7d2fe',width:1.4,curveness:.5},animationDuration:500,animationDurationUpdate:0}]});
  }
- layoutTree();window.addEventListener('resize',layoutTree);
- c.on('click',p=>{if(p.data&&p.data.dk){filterDir(p.data.dk);document.getElementById('works').scrollIntoView()}});
+ // re-layout only when the WIDTH changes (full-page screenshots / mobile URL bars change the height and would
+ // otherwise restart the node animation and leave nodes mid-flight)
+ let lastW=el.clientWidth;layoutTree();
+ window.addEventListener('resize',()=>{const w=el.clientWidth;if(Math.abs(w-lastW)<2)return;lastW=w;
+  const h=treeH(w)+'px';if(el.style.height!==h){el.style.height=h;c.resize()}layoutTree()});
+ c.on('click',p=>{const k=p.data&&(p.data.dk||p.data.more);if(k){filterDir(k);document.getElementById('works').scrollIntoView()}});
 })();
 
 // ---------- works table ----------
@@ -378,7 +423,8 @@ let rDir=null,renderR=()=>{};
 // per-direction coverage: repo counts when repos carry `dirs`; directions with repo_expected:false get a short
 // note (why there is no code) plus their non-code resources (datasets, protocols, portals, biobanks) instead of an empty entry
 (function(){
- const ks=RDIRS?DK:NOREPO;if(!ks.length)return;
+ // no-code directions last, each on a full-width row, so their resource lists never stretch a row of short cards
+ const ks=(RDIRS?DK:NOREPO).slice().sort((a,b)=>(DIRS[a].repo_expected===false)-(DIRS[b].repo_expected===false));if(!ks.length)return;
  const res=x=>`<li>${x.url?`<a href="${safeUrl(x.url)}" target="_blank" rel="noopener">${esc(x.name)}</a>`:esc(x.name)}${x.kind?` <span class="tag">${esc(x.kind)}</span>`:''}${x.note?` <span class="legend-note">${esc(x.note)}</span>`:''}</li>`;
  const card=k=>{const d=DIRS[k];
   if(d.repo_expected===false)return `<div class="odc nr" style="--c:${DC[k]}"><b>${esc(d.short)}</b> <span class="tag nrb">${esc(L.no_repo_badge)}</span><p class="nrn">${esc(d.no_repo_note||L.no_repo_default)}</p>${(d.resources||[]).length?`<div class="legend-note" style="margin-top:4px">${esc(L.alt_resources)}</div><ul>${d.resources.map(res).join('')}</ul>`:''}</div>`;

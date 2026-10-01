@@ -1,6 +1,6 @@
 # research-survey-html · 研究领域调研 → 交互式 HTML 综述
 
-一个**通用、可复用**的 Agent Skill + 独立 Python 流水线：把“某个研究方向的进展”做成一份**可核查、可交互、离线可用**的单文件 HTML 综述，并配套一套**如何查文献**的方法（多数据源检索式、API 用法与限速、滚雪球、去重、发表状态标注、核查规则、导出到 Zotero）。
+一个**通用、可复用**的 Agent Skill + 独立 Python 流水线：把“某个研究方向的进展”做成一份**可核查、可交互、离线可用**的单文件 HTML 综述，并配套一套**如何查文献**的方法（多数据源检索式、API 用法与限速、**不只靠关键词的多策略检索**——必收清单、具名方法/工具检索、引文滚雪球、门户与仓库挖掘、召回率与饱和度检查——去重与预印本合并、发表状态标注、核查规则、导出到 Zotero）。
 
 ![preview](docs/preview.png)
 
@@ -16,9 +16,11 @@ references/               详细说明：查文献、数据格式、分类与国
 scripts/
   build.py                数据目录 -> 单个自包含 HTML（内联 ECharts + 地图 + 数据）
   template.html           页面模板（CSS + ECharts 交互）
-  screenshot.py           Playwright 截图与渲染检查（自动找系统 Chrome，截全部板块并分段）
+  screenshot.py           Playwright 截图与渲染检查（自带/缓存/系统浏览器，找不到自动安装；截全部板块并分段）
   search_arxiv.py  search_s2.py  search_openalex.py  search_crossref.py
   search_biorxiv.py  search_pubmed.py  search_europepmc.py
+  snowball.py             引文滚雪球（refs/cites，Europe PMC/Crossref 免 key → S2 → OpenAlex）+ 门户页/仓库 “cite us” 的 DOI 提取
+  recall_check.py         必收清单核实、各策略召回率、分方向饱和度、来源构成表
   merge_dedup.py  export_bibtex.py  github_repos.py  check_urls.py
   common.py  countries.py
   vendor/echarts.min.js   Apache ECharts 5.6.0（Apache-2.0，附 LICENSE/NOTICE）
@@ -62,11 +64,17 @@ python scripts/search_europepmc.py search '"single-cell" AND "foundation model"'
 #    生命科学主题：PubMed（按相关性分页 + 摘要 + 总命中数）与 Europe PMC；先设检索日志
 export SURVEY_QUERY_LOG=search_log.tsv
 python scripts/search_pubmed.py '"single-cell"[tiab] AND "foundation model"[tiab]' --from 2023/01/01 --max 500 --out cand_pm.jsonl
-python scripts/merge_dedup.py cand_*.jsonl --out candidates.jsonl --csv screening.csv
-#   在 screening.csv 里填 include=1 和 dirs，然后：
+#    不要只靠关键词：先写必收清单并核实，再做具名检索、滚雪球、仓库挖掘，最后量化召回率（references/literature-search.md §1b）
+python scripts/recall_check.py verify must_include.tsv --out must_verified.tsv --jsonl cand_must.jsonl
+python scripts/search_europepmc.py search 'TITLE:"scGPT"' --sort "CITED desc" --max 30 --out name_scgpt.jsonl
+python scripts/snowball.py refs 10.1038/s41592-024-02201-0 --out sb_refs.jsonl          # 以里程碑/综述为种子做后向滚雪球
+python scripts/snowball.py repo-cites bowang-lab/scGPT --out sb_repo.jsonl
+python scripts/merge_dedup.py cand_*.jsonl name_*.jsonl sb_*.jsonl --found-via 'name_*=name' --out candidates.jsonl --csv screening.csv
+python scripts/recall_check.py recall --must must_verified.tsv --pool keyword='cand_pm.jsonl,cand_ppr.jsonl' --pool names='name_*.jsonl' --pool snowball='sb_*.jsonl'
+#   在 screening.csv 里填 include=1 和 dirs（第一个为主方向），然后：
 python scripts/merge_dedup.py candidates.jsonl --screened screening.csv --works-draft my-survey/works_draft.json
 #   复制 examples/agent-science-mini 为 my-survey，补全 meta/works/teams/timeline/repos/narrative
-python scripts/github_repos.py my-survey/repos.json
+python scripts/github_repos.py my-survey/repos.json                 # 追加单个仓库：--add owner/name --dirs KEY --what "…"
 python scripts/check_urls.py my-survey --only portals --write        # 可选：数据门户链接存活检查
 python scripts/build.py my-survey --check && python scripts/build.py my-survey -o out/my-survey.html
 python scripts/screenshot.py out/my-survey.html --outdir out/screens
@@ -79,7 +87,7 @@ python scripts/screenshot.py out/my-survey.html --outdir out/screens
 | 文件 | 每条记录的关键字段 |
 |---|---|
 | `meta.json` | `title`、`check_date`、`time_range`（可选，仅用户指定时间范围时填写）、`directions[{key,name,en,short,color,summary,challenges, repo_expected, no_repo_reason, resources}]`（湿实验等无代码方向设 `repo_expected: false`）、`phases`、`event_categories`、`map{resolution,merge}`、`extra_refs` |
-| `works.json` | `name`、`title`、`dirs[]`（首个为主方向）、`featured`（里程碑，树图优先）、`inst`、`country`（ISO2）、`date`（首次公开日期）、`status`、`peer`、`venue_type`、`authors`（全部作者）、`corporate_author`、`doi`、`preprint_doi`、`arxiv`、`url`、`contrib`、`checked` |
+| `works.json` | `name`、`title`、`dirs[]`（首个为主方向）、`primary_dir`（可选）、`featured`（里程碑，在主方向的树枝上必显示）、`found_via`（检索来源策略）、`inst`、`country`（ISO2）、`date`（首次公开日期）、`status`、`peer`、`venue_type`、`authors`（全部作者）、`corporate_author`、`doi`、`preprint_doi`/`preprint_date`、`arxiv`、`url`、`contrib`、`checked` |
 | `teams.json` | `name`、`country`、`region`、`type`、`dirs[]`、`works`、`progress`(1–4)、`ach` |
 | `timeline.json` | `date`、`phase`、`cat`、`title`、`desc`、`url` |
 | `repos.json` | 手写 `repo`、`cat`、`dirs`（可选）、`what`、`arch`、`run`、`deps`、`lim`、`license_note`、`stable`；抓取 `stars`、`forks`、`license`、`last_commit`、`release`、`archived` |
@@ -94,11 +102,11 @@ python scripts/screenshot.py out/my-survey.html --outdir out/screens
 |---|---|---|
 | arXiv API | 预印本主力 | `export.arxiv.org/api/query`；≤1 次/3 秒、单连接；429 时退避并改用 S2/OpenAlex |
 | Semantic Scholar Graph API | 跨学科检索、批量核对、引用/参考文献滚雪球 | `/paper/search`、`/search/bulk`、`/paper/batch`、`/citations`、`/references`；建议申请 key；429 时退避重试，仍失败则保存已取结果并以退出码 2 结束 |
-| OpenAlex | 全学科目录、机构与国家 | `/works?search=&filter=`；2026-02 起需免费 API key，单条 DOI 查询免费；额度耗尽立即停止，有总超时 |
-| Crossref | DOI、期刊/会议信息、预印本↔正式版 | `/works/{doi}`、`query.bibliographic`；加 `mailto` |
-| bioRxiv / medRxiv | 生命科学/医学预印本 | `api.biorxiv.org/details/…`：`doi` 模式查版本、通讯单位与正式版（DOI 前缀 `10.1101` 与 2025-12 起的 `10.64898`）；无关键词搜索，关键词检索用 Europe PMC `SRC:PPR` |
+| OpenAlex | 全学科目录、机构与国家、引用网络 | `/works?search=&filter=`；2026-02 起需免费 API key，单条 DOI 查询免费；无 key/额度耗尽时自动改用 Crossref 免 key 检索 |
+| Crossref | DOI、期刊/会议信息、预印本↔正式版（`is-preprint-of`/`has-preprint`）、参考文献列表 | `/works/{doi}`、`query.bibliographic`；加 `mailto`；也是 OpenAlex 的免 key 回退和后向滚雪球来源 |
+| bioRxiv / medRxiv | 生命科学/医学预印本 | `api.biorxiv.org/details/…`：`doi` 模式查版本（`date` = v1 首发日）、通讯单位与正式版（DOI 前缀 `10.1101` 与 2025-12 起的 `10.64898`）；无关键词搜索，关键词检索用 Europe PMC `SRC:PPR` |
 | PubMed E-utilities | 生物医学 | `esearch`（retstart 分页、按相关性）+ `esummary` + `efetch`（摘要/单位/MeSH）；打印总命中数；3 次/秒（有 key 10 次/秒） |
-| Europe PMC REST | 生命科学关键词检索 + 预印本 | `ebi.ac.uk/europepmc/webservices/rest/search`；无需 key；单位、被引数、hitCount 日志 |
+| Europe PMC REST | 生命科学关键词检索 + 预印本 + 免 key 的参考文献/被引列表 | `ebi.ac.uk/europepmc/webservices/rest/search`；无需 key；单位、被引数、hitCount 日志；5xx 时保存已取结果并以退出码 2 结束 |
 | DBLP | CS 会议/期刊是否正式发表（仅 CS） | `dblp.org/search/publ/api`；遇到反爬验证改为人工 |
 | OpenReview | ICLR/NeurIPS/TMLR 录用状态（仅 CS） | `api2.openreview.net/notes…` |
 | Hugging Face Papers | 有代码的热门论文（Papers with Code 已于 2025-07 停服并跳转至此） | `huggingface.co/api/papers/<arXiv ID>` |
@@ -120,11 +128,11 @@ python scripts/screenshot.py out/my-survey.html --outdir out/screens
 
 ## English
 
-**research-survey-html** is a topic-agnostic agent skill (SKILL.md, Cursor / Claude Code style) plus a small Python pipeline for producing a comprehensive literature/field survey as a **single self-contained, offline, interactive HTML report** (sticky TOC, timeline, taxonomy tree, filterable works table, team cards, clickable world heatmap, GitHub repo charts, references). It also documents *how to search the literature*, with domain-aware source sets (life sciences: PubMed + Europe PMC + bioRxiv/medRxiv + consortium portals; CS/AI: arXiv + Semantic Scholar + DBLP/OpenReview; others: OpenAlex/Crossref): query design and keyword expansion; arXiv (1 req / 3 s, 429 fallback), Semantic Scholar (graceful 429 degradation), OpenAlex (API key since Feb 2026), Crossref, bioRxiv/medRxiv (10.1101 and 10.64898 DOIs), PubMed (paging, abstracts, hit counts), Europe PMC, DBLP, OpenReview, Hugging Face Papers; a reproducible query log; snowballing; DOI/arXiv de-duplication; peer-review status labelling; verification rules; and BibTeX/RIS export for Zotero.
+**research-survey-html** is a topic-agnostic agent skill (SKILL.md, Cursor / Claude Code style) plus a small Python pipeline for producing a comprehensive literature/field survey as a **single self-contained, offline, interactive HTML report** (sticky TOC, timeline, taxonomy tree, filterable works table, team cards, clickable world heatmap, GitHub repo charts, references). It also documents *how to search the literature*, with domain-aware source sets (life sciences: PubMed + Europe PMC + bioRxiv/medRxiv + consortium portals; CS/AI: arXiv + Semantic Scholar + DBLP/OpenReview; others: OpenAlex/Crossref): query design and keyword expansion; arXiv (1 req / 3 s, 429 fallback), Semantic Scholar (graceful 429 degradation), OpenAlex (API key since Feb 2026), Crossref, bioRxiv/medRxiv (10.1101 and 10.64898 DOIs), PubMed (paging, abstracts, hit counts), Europe PMC, DBLP, OpenReview, Hugging Face Papers; a reproducible query log (searches) plus a separate lookup log (DOI verification); a **mandatory multi-strategy retrieval procedure** so a survey never relies on keyword search alone — a must-include list written before searching and verified against Crossref/Europe PMC, tool/method/dataset-name queries per direction, backward/forward citation snowballing (`snowball.py`: Europe PMC and Crossref keyless, then S2/OpenAlex), harvesting DOIs from consortium publication pages and GitHub "cite us" sections, recall of each strategy against the must-include list, per-direction saturation and a `found_via` provenance field (`recall_check.py`); DOI/arXiv de-duplication with preprint→journal linking; peer-review status labelling; verification rules; and BibTeX/RIS export for Zotero.
 
 - Install as a skill: `git clone https://github.com/lyangfan/research-survey ~/.cursor/skills/research-survey-html` (or `~/.claude/skills/research-survey-html`; the folder name must equal the skill `name`).
 - Standalone: `python scripts/build.py examples/agent-science-mini -o out/demo.html && python scripts/screenshot.py out/demo.html --outdir out/screens`.
 - No default time window: a time range is applied to searching/screening (and `meta.time_range`) only when the user explicitly asks for one; otherwise searches run without date filters and the report states that no time restriction was applied.
-- Landmark works (`"featured": true`) are always shown in the taxonomy tree; optional `portals.json` adds a data-portal section with link-liveness status from `check_urls.py`.
-- Only the screenshot step needs a dependency (`playwright`; a system Chrome is auto-detected); everything else is standard-library Python 3.9+. See [CHANGELOG.md](CHANGELOG.md).
+- Landmark works (`"featured": true`) are always shown under their primary direction in the taxonomy tree (cross-tagged works only fill free slots, dashed; overflow becomes a clickable "+N" leaf); optional `portals.json` adds a data-portal section with link-liveness status from `check_urls.py`.
+- Only the screenshot step needs a dependency (`playwright`; bundled, cached or system Chromium is used and Chromium is installed automatically if none is found); everything else is standard-library Python 3.9+. See [CHANGELOG.md](CHANGELOG.md).
 - License: MIT. Bundles Apache ECharts 5.6.0 (Apache-2.0, NOTICE included). World map: Natural Earth (public domain), downloaded at build time, not committed.
