@@ -5,13 +5,16 @@ description: Use when the user asks for a comprehensive literature or field surv
 
 # 研究领域调研 → 交互式 HTML 报告
 
-把“某个研究方向近几年的进展”做成一份**可核查、可交互、离线可用**的单文件 HTML 综述：时间轴、方向分类树、可筛选的代表作表、团队卡片、世界热力图（点击国家看名单）、开源仓库图表、参考文献，并导出 BibTeX/RIS 供 Zotero 导入。
+把“某个研究方向的进展”做成一份**可核查、可交互、离线可用**的单文件 HTML 综述：时间轴、方向分类树、可筛选的代表作表、团队卡片、世界热力图（点击国家看名单）、开源仓库图表、参考文献，并导出 BibTeX/RIS 供 Zotero 导入。
 
 本文件所在目录记为 `SKILL_DIR`。脚本在 `SKILL_DIR/scripts/`，详细说明在 `SKILL_DIR/references/`，示例数据在 `SKILL_DIR/examples/agent-science-mini/`。检索与构建只依赖 Python 3.9+ 标准库；截图需要 `playwright`。
 
-## 0. 先问清范围（一次问完，用户没说的给默认值并写进报告）
+## 0. 先问清范围（一次问完；除时间范围外，用户没说的给默认值并写进报告）
 1. **主题**与边界（包含/不包含什么，相邻领域怎么处理）。
-2. **时间范围**（默认最近 2–3 年，截止今天）；更早的工作只作一句背景。
+2. **时间范围**：**没有默认值，不要自行加任何时间限制**（不要默认“最近几年”，也不要主动提议某个时间窗口）。
+   - 只有用户**明确给出**时间范围（如“2023 年以来”“近三年”“2024-01 至今”）时，才把它换算成具体日期（相对说法以今天为基准），写进 `meta.time_range`，并作为约束用于检索（`--from/--to`、`--year`、各数据源的日期语法）和筛选。
+   - 用户没提：检索时**不传任何日期参数**、筛选时**不按日期排除**，早期与近期工作一视同仁，按相关性与重要性取舍；`meta.json` 不写 `time_range`。
+   - 报告“范围与方法”写明：用户指定的时间范围，或“未设时间限制”。
 3. **是否收录预印本**（默认收录，逐条标注状态）；是否收录博客/产品/新闻。
 4. **输出语言**（默认与用户一致，如简体中文 + 英文术语）与读者（导师、组会、自己入门）。
 5. **规模与板块**：代表作数量（默认 50–150）、是否需要团队/地图/开源仓库板块；输出路径；是否导出 Zotero。
@@ -19,18 +22,19 @@ description: Use when the user asks for a comprehensive literature or field surv
 ## 1. 查文献（如何查文献）→ 详见 [references/literature-search.md](references/literature-search.md)
 1. **设计检索式**：拆成 2–4 个概念块，每块扩展同义词/缩写/上下位词/中文词；从种子论文和综述反向抽词；按各数据源语法分别改写；记录每轮检索式、日期、命中数（写进“范围与方法”）。
 2. **多源检索**（脚本输出统一 JSONL 候选）：
-   - arXiv：`scripts/search_arxiv.py --query 'abs:"…" AND cat:cs.AI' --from … --to …`（**≤1 次/3 秒、单连接**；持续 429 就停，改用 Semantic Scholar batch / OpenAlex / abs 页面核对）。
+   - 日期参数一律可选、脚本默认不做日期过滤：**只有用户指定了时间范围**才给下列命令加 `--from/--to`（S2 用 `--year`）。
+   - arXiv：`scripts/search_arxiv.py --query 'abs:"…" AND cat:cs.AI' [--from … --to …]`（**≤1 次/3 秒、单连接**；持续 429 就停，改用 Semantic Scholar batch / OpenAlex / abs 页面核对）。
    - Semantic Scholar：`scripts/search_s2.py search|bulk|batch|refs|cites`（建议设 `S2_API_KEY`）。
    - OpenAlex：`scripts/search_openalex.py search …`（2026-02 起需 `OPENALEX_API_KEY`，单条 DOI 查询免费）。
    - Crossref：`scripts/search_crossref.py doi|title …`（DOI/venue 核对，设 `SURVEY_MAILTO`）。
-   - bioRxiv/medRxiv：`scripts/search_biorxiv.py window --category … --kw …`（API 无关键词搜索，按日期窗口拉取后本地过滤；`/pubs/` 查是否已正式发表）。
+   - bioRxiv/medRxiv：`scripts/search_biorxiv.py window --category … --kw … [--from … --to …]`（API 无关键词搜索，按日期窗口拉取后本地过滤；不传日期时扫描整个存档（服务器上线至今），用 `--category` 缩小；`/pubs/` 查是否已正式发表）。
    - PubMed：`scripts/search_pubmed.py '…[tiab]'`。
    - DBLP、OpenReview：核对 CS 会议是否录用（端点见参考文档）。
    - Hugging Face Papers（Papers with Code 已于 2025-07 停服并跳转至此）：找有代码的热门工作。
    - Google Scholar、知网：**只人工检索**，不写爬虫；用 Zotero Connector 保存。
    - 公司/实验室博客、新闻：用 WebSearch/WebFetch，标为“未经同行评审/公司自报”。
 3. **滚雪球**：5–15 篇种子论文做后向（refs）+ 前向（cites），新增相关条目 <5% 时停止。
-4. **合并去重与筛选**：`scripts/merge_dedup.py cand_*.jsonl --out candidates.jsonl --csv screening.csv` → 在 CSV 中填 `include=1` 和 `dirs` → `--screened screening.csv --works-draft works_draft.json` 生成 works 草稿。去重键：DOI（非 arXiv DOI）> arXiv ID > 规范化标题；预印本与正式版合并为一条。
+4. **合并去重与筛选**：`scripts/merge_dedup.py cand_*.jsonl --out candidates.jsonl --csv screening.csv` → 在 CSV 中填 `include=1` 和 `dirs` → `--screened screening.csv --works-draft works_draft.json` 生成 works 草稿。去重键：DOI（非 arXiv DOI）> arXiv ID > 规范化标题；预印本与正式版合并为一条。只有用户指定了时间范围才按日期排除条目。
 5. **标注状态**：`peer: true` 仅限官方渠道可查的期刊/会议（含 workshop，需写明）；预印本、博客、产品、公司自报一律 `peer: false` 并在 `status` 写清楚；只有作者自述的录用写“据 README，未核对官方名单”。
 6. **核查规则**：绝不编造；每条要有可点击 `url` 和 `checked` 日期；机构/国家查不到写“—（未核实）”、`country` 留空、不计入地图；动态数字注明抓取日期；最终抽查 10%。
 7. **导出 Zotero**：`scripts/export_bibtex.py <data_dir> --out out/references` → `.bib`、`.ris`（方向键成为标签）和 `zotero_identifiers.txt`（粘贴到 Zotero“魔棒”最完整）。
@@ -45,7 +49,7 @@ description: Use when the user asks for a comprehensive literature or field surv
 
 ## 4. 生成 HTML → 详见 [references/data-schema.md](references/data-schema.md)、[references/html-build-and-verify.md](references/html-build-and-verify.md)
 1. 新建数据目录（可复制 `examples/agent-science-mini/` 再替换内容）：`meta.json`、`works.json`、`teams.json`、`timeline.json`、`repos.json`、`narrative/{summary,scope,challenges,caveats}.html`。
-2. 写 narrative：执行摘要（5–8 条关键发现，每条有事实和来源）、范围与方法（时间、来源、检索方式、状态标注、计数口径、核查日期与时区）、挑战与趋势、注意事项与未核实项。
+2. 写 narrative：执行摘要（5–8 条关键发现，每条有事实和来源）、范围与方法（时间范围：用户指定的范围或“未设时间限制”；来源、检索方式、状态标注、计数口径、核查日期与时区）、挑战与趋势、注意事项与未核实项。
 3. `python scripts/build.py <data_dir> --check`，修完 error 后 `python scripts/build.py <data_dir> -o out/survey.html`。输出单个自包含 HTML（内联 ECharts 与地图，离线可用）；缺省的板块自动隐藏、目录自动编号。
 
 ## 5. 截图验证（交付前必做）

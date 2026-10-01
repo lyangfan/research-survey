@@ -7,8 +7,12 @@ export OPENALEX_API_KEY=...  Free key = $1/day budget (~1,000 searches or ~10,00
 calls; single-work lookups by DOI/ID are free). Keyless calls share a tiny per-IP budget and
 may return 429 "Insufficient budget". Check usage: https://api.openalex.org/rate-limit?api_key=KEY
 
+No date filter is applied unless --from/--to are given; pass them only when the user
+explicitly asked for a time range.
+
 Examples
-  python search_openalex.py search "autonomous scientific discovery" --from 2024-01-01 --to 2026-10-01 --max 200
+  python search_openalex.py search "autonomous scientific discovery" --max 200
+  python search_openalex.py search "autonomous scientific discovery" --from 2024-01-01 --to 2026-10-01   # user-specified range
   python search_openalex.py search "self-driving laboratory" --filter type:article,is_oa:true
   python search_openalex.py doi 10.1038/s41586-025-09640-5
 """
@@ -87,8 +91,8 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cmd", choices=["search", "doi"])
     ap.add_argument("query")
-    ap.add_argument("--from", dest="d_from")
-    ap.add_argument("--to", dest="d_to")
+    ap.add_argument("--from", dest="d_from", help="YYYY-MM-DD; optional; no date filter unless given (pass only when the user asked for a time range)")
+    ap.add_argument("--to", dest="d_to", help="YYYY-MM-DD; optional; no date filter unless given (pass only when the user asked for a time range)")
     ap.add_argument("--filter", help="extra OpenAlex filter, e.g. type:article,is_oa:true")
     ap.add_argument("--max", type=int, default=100)
     ap.add_argument("--out", default="-")

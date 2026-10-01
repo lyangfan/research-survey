@@ -66,6 +66,7 @@ LABELS = {
   th_act="活跃度", th_lic="许可证", th_desc="简介", det_arch="架构/组件", det_run="如何运行", det_deps="依赖", det_lim="局限",
   source="来源 ↗", all_ev_cats="全部类别", no_events="无匹配事件", main_challenge="主要难题：",
   see_works="查看该方向代表作 →", tree_click="点击筛选代表作", lic_none="未声明", repo_ref="开源仓库",
+  range_since="{start} 起", range_until="截至 {end}",
   footer="本报告基于公开资料整理（检查日期 {check}）。“自报”“未核实”等标注请留意；引用时请以原始来源为准。"),
  "en": dict(
   toc="Contents", sec_summary="Executive summary", sec_scope="Scope, method & counting rules", sec_timeline="Timeline",
@@ -94,6 +95,7 @@ LABELS = {
   th_act="Activity", th_lic="License", th_desc="Summary", det_arch="Architecture", det_run="How to run", det_deps="Dependencies", det_lim="Limitations",
   source="source ↗", all_ev_cats="All categories", no_events="No matching events", main_challenge="Key challenges: ",
   see_works="See works →", tree_click="click to filter works", lic_none="none declared", repo_ref="repository",
+  range_since="since {start}", range_until="until {end}",
   footer="Compiled from public sources (checked {check}). Mind the 'self-reported' / 'unverified' labels; cite original sources."),
 }
 DEFAULT_LEVELS = {"zh": ["原型/基准", "论文或开源系统", "高影响力发表或实验验证", "产品化/规模化应用"],
@@ -200,10 +202,46 @@ def normalise_world(path, merge=None, drop=("AQ",)):
 DATE_RE = re.compile(r"^\d{4}(-\d{2}(-\d{2})?)?$")
 
 
+def get_time_range(meta):
+    """User-specified time range as {"start"?, "end"?} with empty values dropped.
+
+    There is NO default: an absent/empty `time_range` means no time restriction was applied."""
+    tr = meta.get("time_range") or {}
+    if not isinstance(tr, dict):
+        return {}
+    return {k: str(tr[k]).strip() for k in ("start", "end") if str(tr.get(k) or "").strip()}
+
+
+def range_label(tr, L):
+    """Human-readable period for the header; "" when no time range was specified."""
+    s, e = tr.get("start"), tr.get("end")
+    if s and e:
+        return f"{s} – {e}"
+    if s:
+        return L["range_since"].format(start=s)
+    if e:
+        return L["range_until"].format(end=e)
+    return ""
+
+
+def _outside(date, tr):
+    s, e = tr.get("start"), tr.get("end")
+    return bool(date) and ((s and date[:len(s)] < s[:len(date)]) or (e and date[:len(e)] > e[:len(date)]))
+
+
 def validate(meta, works, teams, repos, events):
     dk = [d["key"] for d in meta.get("directions", [])]
     if not dk:
         err("meta.directions is empty")
+    raw_tr = meta.get("time_range")
+    if raw_tr not in (None, {}, "") and not isinstance(raw_tr, dict):
+        err("meta.time_range must be an object {start, end} (omit it when the user set no time range)")
+    tr = get_time_range(meta)
+    for k, v in tr.items():
+        if not DATE_RE.match(v):
+            err(f"meta.time_range.{k} must be YYYY, YYYY-MM or YYYY-MM-DD")
+    if tr.get("start") and tr.get("end") and tr["start"] > tr["end"]:
+        err("meta.time_range.start is after meta.time_range.end")
     phases = {p["key"] for p in meta.get("phases", [])}
     seen = {}
     for i, w in enumerate(works):
@@ -218,6 +256,8 @@ def validate(meta, works, teams, repos, events):
                 err(f"{tag}: unknown direction '{d}'")
         if w.get("date") and not DATE_RE.match(w["date"]):
             err(f"{tag}: date must be YYYY, YYYY-MM or YYYY-MM-DD")
+        elif tr and _outside(w.get("date", ""), tr):
+            warn(f"{tag}: date {w['date']} is outside the user-specified meta.time_range")
         c = w.get("country", "")
         if c and c not in COUNTRIES:
             warn(f"{tag}: country '{c}' not in countries.py (add it for a Chinese label)")
@@ -244,6 +284,8 @@ def validate(meta, works, teams, repos, events):
         for k in ("date", "title", "url"):
             if not e.get(k):
                 err(f"{tag}: missing '{k}'")
+        if e.get("date") and tr and _outside(e["date"], tr):
+            warn(f"{tag}: date {e['date']} is outside the user-specified meta.time_range")
         if phases and e.get("phase") not in phases:
             warn(f"{tag}: phase '{e.get('phase')}' not in meta.phases")
     for i, r in enumerate(repos):
@@ -322,10 +364,11 @@ def derive(meta, works, teams, repos, events, lang):
     names.update(meta.get("country_names", {}))
     cnt_team = collections.Counter(t["country"] for t in teams if t["country"])
     cnt_work = collections.Counter(w["country"] for w in works if w["country"])
-    tr = meta.get("time_range", {})
+    tr = get_time_range(meta)  # no time range -> chart axis spans the data's own years
     years = sorted({int(w["date"][:4]) for w in works} | {int(e["date"][:4]) for e in events})
     y0 = int(str(tr.get("start", years[0] if years else check[:4]))[:4])
     y1 = int(str(tr.get("end", years[-1] if years else check[:4]))[:4])
+    y1 = max(y0, y1)
     levels = meta.get("progress_levels") or DEFAULT_LEVELS.get(lang, DEFAULT_LEVELS["zh"])
     radar = meta.get("radar_countries") or [c for c, _ in cnt_team.most_common(3)]
     data = dict(works=works, teams=teams, events=events, repos=out_repos, dirs=dirs, phases=meta.get("phases", []),
@@ -390,8 +433,8 @@ def render(d, out, world_arg=None, echarts_arg=None, no_download=False):
         f'<div class="phase" data-ph="{esc(p["key"])}" onclick="setPhase(\'{esc(p["key"])}\')"><div class="pn">{esc(p["key"])}</div>'
         f'<h4>{esc(p["title"])}</h4><p>{esc(p.get("desc", ""))}</p></div>' for p in data["phases"])
     lv = "　".join(f"<b>{'①②③④'[i]}</b> {esc(x)}" for i, x in enumerate(levels))
-    tr = meta.get("time_range", {})
-    kicker = meta.get("kicker") or f"RESEARCH SURVEY · {tr.get('start', '')} – {tr.get('end', '')}"
+    period = range_label(get_time_range(meta), L)  # "" when the user specified no time range
+    kicker = meta.get("kicker") or ("RESEARCH SURVEY" + (f" · {period}" if period else ""))
     subs = {
         "LANG": esc(meta.get("lang", "zh-CN")), "TITLE": esc(meta.get("title", "Research Survey")),
         "TITLE_HTML": meta.get("title_html") or esc(meta.get("title", "")), "KICKER": esc(kicker),

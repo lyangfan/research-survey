@@ -8,8 +8,14 @@ If arXiv keeps returning 429, stop and use the fallbacks documented in
 references/literature-search.md (Semantic Scholar batch by ARXIV:id, OpenAlex,
 or the arxiv.org/abs/<id> page) instead of hammering the API.
 
+No date filter is applied unless --from/--to are given; pass them only when the user
+explicitly asked for a time range.
+
 Examples
-  # keyword search, date window, newest first
+  # keyword search, newest first, no date filter
+  python search_arxiv.py --query 'abs:"scientific discovery" AND abs:agent AND cat:cs.AI' \
+      --max 200 --out cand_arxiv.jsonl
+  # same, restricted to a user-specified time range
   python search_arxiv.py --query 'abs:"scientific discovery" AND abs:agent AND cat:cs.AI' \
       --from 2024-01-01 --to 2026-10-01 --max 200 --out cand_arxiv.jsonl
   # verify a list of titles (one per line) -> best match each
@@ -113,8 +119,8 @@ if __name__ == "__main__":
     g.add_argument("--query", help="raw arXiv search_query (ti:, abs:, au:, cat:, AND/OR/ANDNOT)")
     g.add_argument("--ids", help="comma-separated arXiv IDs")
     g.add_argument("--titles", help="file with one title per line to verify")
-    ap.add_argument("--from", dest="d_from")
-    ap.add_argument("--to", dest="d_to")
+    ap.add_argument("--from", dest="d_from", help="YYYY-MM-DD; optional; no date filter unless given (pass only when the user asked for a time range)")
+    ap.add_argument("--to", dest="d_to", help="YYYY-MM-DD; optional; no date filter unless given (pass only when the user asked for a time range)")
     ap.add_argument("--max", type=int, default=100)
     ap.add_argument("--sort", default="submittedDate", choices=["submittedDate", "lastUpdatedDate", "relevance"])
     ap.add_argument("--out", default="-")

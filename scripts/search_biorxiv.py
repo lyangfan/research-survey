@@ -7,17 +7,26 @@ cursor pagination), optionally filtered by subject category. This script pages t
 window and keeps records whose title/abstract match your keywords locally.
 It can also look up whether a preprint was later published (pubs endpoint -> published_doi).
 
+The date window is how this API pages, not a time restriction: without --from/--to the window
+is the WHOLE archive (server launch -> today), i.e. no time filter. Pass --from/--to only when
+the user explicitly asked for a time range; narrow a full-archive scan with --category instead.
+
 Endpoints used
   /details/{server}/{from}/{to}/{cursor}[?category=bioinformatics]
   /details/{server}/{doi}                     single preprint (all versions)
   /pubs/{server}/{doi}                        published-article link for one preprint
 
 Examples
+  # no time restriction: scan the whole archive of one category
+  python search_biorxiv.py window --server biorxiv --category bioinformatics \
+      --kw "large language model" --kw agent --max-pages 1000 --out brx.jsonl
+  # user-specified time range
   python search_biorxiv.py window --server biorxiv --from 2025-01-01 --to 2025-03-31 \
       --category bioinformatics --kw "large language model" --kw agent --out brx.jsonl
   python search_biorxiv.py doi 10.1101/2024.12.31.630767
 """
 import argparse
+import datetime as dt
 import json
 import re
 import time
@@ -25,6 +34,8 @@ import time
 from common import get_json, log, write_jsonl, today
 
 BASE = "https://api.biorxiv.org"
+# first posting dates; used as the window start when no --from is given (= no time filter)
+ARCHIVE_START = {"biorxiv": "2013-11-01", "medrxiv": "2019-06-01"}
 
 
 def norm(c, server):
@@ -38,8 +49,11 @@ def norm(c, server):
         abstract=c.get("abstract", ""), status="preprint", checked=today())
 
 
-def window(server, d_from, d_to, category=None, kws=(), mode="all", max_pages=200):
-    rows, cursor, pages = [], 0, 0
+def window(server, d_from=None, d_to=None, category=None, kws=(), mode="all", max_pages=200):
+    d_from = d_from or ARCHIVE_START[server]
+    d_to = d_to or dt.date.today().isoformat()
+    log(f"[{server}] window {d_from} .. {d_to}" + (f" category={category}" if category else ""))
+    rows, cursor, pages, total = [], 0, 0, 0
     pats = [re.compile(re.escape(k), re.I) for k in kws]
     while pages < max_pages:
         url = f"{BASE}/details/{server}/{d_from}/{d_to}/{cursor}"
@@ -58,6 +72,9 @@ def window(server, d_from, d_to, category=None, kws=(), mode="all", max_pages=20
         if not coll or cursor >= total:
             break
         time.sleep(0.5)
+    if total and cursor < total:
+        log(f"[{server}] WARNING: stopped at --max-pages {max_pages} after {cursor}/{total} records; "
+            f"the window was NOT fully scanned (raise --max-pages, add --category, or slice by month)")
     return rows
 
 
@@ -76,8 +93,9 @@ if __name__ == "__main__":
     ap.add_argument("cmd", choices=["window", "doi"])
     ap.add_argument("doi", nargs="?")
     ap.add_argument("--server", default="biorxiv", choices=["biorxiv", "medrxiv"])
-    ap.add_argument("--from", dest="d_from")
-    ap.add_argument("--to", dest="d_to")
+    ap.add_argument("--from", dest="d_from", help="YYYY-MM-DD; optional, default = archive start (no time filter); "
+                    "pass only when the user asked for a time range")
+    ap.add_argument("--to", dest="d_to", help="YYYY-MM-DD; optional, default = today")
     ap.add_argument("--category", help="e.g. bioinformatics, neuroscience, synthetic_biology")
     ap.add_argument("--kw", action="append", default=[], help="keyword (repeatable)")
     ap.add_argument("--any", action="store_true", help="keep if ANY keyword matches (default ALL)")

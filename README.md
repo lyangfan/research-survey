@@ -1,6 +1,6 @@
 # research-survey-html · 研究领域调研 → 交互式 HTML 综述
 
-一个**通用、可复用**的 Agent Skill + 独立 Python 流水线：把“某个研究方向近几年的进展”做成一份**可核查、可交互、离线可用**的单文件 HTML 综述，并配套一套**如何查文献**的方法（多数据源检索式、API 用法与限速、滚雪球、去重、发表状态标注、核查规则、导出到 Zotero）。
+一个**通用、可复用**的 Agent Skill + 独立 Python 流水线：把“某个研究方向的进展”做成一份**可核查、可交互、离线可用**的单文件 HTML 综述，并配套一套**如何查文献**的方法（多数据源检索式、API 用法与限速、滚雪球、去重、发表状态标注、核查规则、导出到 Zotero）。
 
 ![preview](docs/preview.png)
 
@@ -38,7 +38,7 @@ git clone https://github.com/lyangfan/research-survey ~/.claude/skills/research-
 git clone https://github.com/lyangfan/research-survey .cursor/skills/research-survey-html
 ```
 
-然后直接对 Agent 说，例如：“帮我调研 2023 年以来单细胞基础模型的进展，做成交互式 HTML 报告，并导出 Zotero 可导入的参考文献”。Agent 会按 `SKILL.md` 先确认范围，再检索、核查、整理数据并构建、截图验证。
+然后直接对 Agent 说，例如：“帮我调研 2023 年以来单细胞基础模型的进展，做成交互式 HTML 报告，并导出 Zotero 可导入的参考文献”。Agent 会按 `SKILL.md` 先确认范围，再检索、核查、整理数据并构建、截图验证。技能**不设默认时间范围**：只有你明确说了时间范围（如上例的“2023 年以来”），检索和筛选才会按它限定；不说就不加任何时间限制。
 
 ## 用法二：独立流水线
 
@@ -52,10 +52,11 @@ python scripts/screenshot.py out/agent-science-mini.html --outdir out/screens   
 python scripts/export_bibtex.py examples/agent-science-mini --out out/references
 
 # 2) 自己的主题：检索 -> 去重筛选 -> 填数据 -> 构建
+#    日期参数（--from/--to、--year）都是可选的，不传就不做日期过滤；下面的日期只是“用户指定了 2023 年以来”时的写法
 export SURVEY_MAILTO=you@example.org S2_API_KEY=... OPENALEX_API_KEY=... GITHUB_TOKEN=...   # 均可选，但强烈建议
 python scripts/search_arxiv.py --query 'abs:"foundation model" AND abs:"single-cell"' --from 2023-01-01 --max 300 --out cand_arxiv.jsonl
 python scripts/search_s2.py search "single-cell foundation model" --year 2023- --max 300 --out cand_s2.jsonl
-python scripts/search_biorxiv.py window --from 2025-01-01 --to 2025-03-31 --category bioinformatics --kw "foundation model" --out cand_brx.jsonl
+python scripts/search_biorxiv.py window --from 2023-01-01 --category bioinformatics --kw "foundation model" --out cand_brx.jsonl   # 不传日期 = 扫描整个存档
 python scripts/merge_dedup.py cand_*.jsonl --out candidates.jsonl --csv screening.csv
 #   在 screening.csv 里填 include=1 和 dirs，然后：
 python scripts/merge_dedup.py candidates.jsonl --screened screening.csv --works-draft my-survey/works_draft.json
@@ -71,7 +72,7 @@ python scripts/screenshot.py out/my-survey.html --outdir out/screens
 
 | 文件 | 每条记录的关键字段 |
 |---|---|
-| `meta.json` | `title`、`check_date`、`time_range`、`directions[{key,name,en,short,color,summary,challenges}]`、`phases`、`event_categories`、`map{resolution,merge}`、`extra_refs` |
+| `meta.json` | `title`、`check_date`、`time_range`（可选，仅用户指定时间范围时填写）、`directions[{key,name,en,short,color,summary,challenges}]`、`phases`、`event_categories`、`map{resolution,merge}`、`extra_refs` |
 | `works.json` | `name`、`title`、`dirs[]`（首个为主方向）、`inst`、`country`（ISO2）、`date`、`status`、`peer`、`venue_type`、`authors`、`doi`、`arxiv`、`url`、`contrib`、`checked` |
 | `teams.json` | `name`、`country`、`region`、`type`、`dirs[]`、`works`、`progress`(1–4)、`ach` |
 | `timeline.json` | `date`、`phase`、`cat`、`title`、`desc`、`url` |
@@ -111,5 +112,6 @@ python scripts/screenshot.py out/my-survey.html --outdir out/screens
 
 - Install as a skill: `git clone https://github.com/lyangfan/research-survey ~/.cursor/skills/research-survey-html` (or `~/.claude/skills/research-survey-html`; the folder name must equal the skill `name`).
 - Standalone: `python scripts/build.py examples/agent-science-mini -o out/demo.html && python scripts/screenshot.py out/demo.html --outdir out/screens`.
+- No default time window: a time range is applied to searching/screening (and `meta.time_range`) only when the user explicitly asks for one; otherwise searches run without date filters and the report states that no time restriction was applied.
 - Only the screenshot step needs a dependency (`playwright`); everything else is standard-library Python 3.9+.
 - License: MIT. Bundles Apache ECharts 5.6.0 (Apache-2.0, NOTICE included). World map: Natural Earth (public domain), downloaded at build time, not committed.
