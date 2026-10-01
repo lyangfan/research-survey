@@ -25,6 +25,12 @@
 距检查日的最近提交天数：≤30 高度活跃；≤90 活跃；≤365 维护放缓；>365 停滞。归档仓库另加 `archived` 标签。
 - “停滞”只表示很久没有提交。对功能完备、刻意保持稳定的成熟工具（如 tensorQTL、LeafCutter 这类广泛使用的方法实现），在 `repos.json` 设 `"stable": true`，表格显示“成熟稳定（低频更新）”（图表仍按天数着色），并在 `lim` 里写明维护现状。
 
+## 1b. 没有代码的方向：不要硬凑仓库
+- 湿实验/实验型方向（组织与样本采集、生物样本库、动物/细胞/类器官实验、临床队列、测序数据生产、实验方案开发）通常**不发布代码仓库**。找不到官方仓库是正常结果，不要用无关工具、通用分析包、个人脚本或社区复现充数。
+- 在 `meta.directions[]` 中设 `"repo_expected": false` + 一句 `no_repo_reason`；把时间花在**非代码资源**上，写进该方向的 `resources`：数据集（dbGaP/EGA/GEO/SRA/ENA 登录号、联盟数据发布页）、实验方案（SOP、protocols.io、论文 Methods/补充材料）、数据门户与浏览器、生物样本库/样本资源（需申请的写明访问方式）。同时是门户的写进 `portals.json` 并标 `dirs`，会自动列入。
+- 该方向里确有代码的工作（如配套分析流程）照常写进 `repos.json`；此时说明该方向“有代码”，去掉 `repo_expected: false`（`--check` 会提示这种矛盾）。
+- 给仓库加 `dirs` 后，开源板块会按方向显示仓库数；某个方向零仓库不会报警，页面写“本报告未收录该方向的仓库”。
+
 ## 3b. 数据门户（不是仓库）
 门户、数据库、在线工具（GTEx Portal、eQTL Catalogue、物种门户、网页服务器）写进 `portals.json`，不要塞进 `repos.json` 或 summary 表格。`python scripts/check_urls.py <data_dir> --only portals --write` 检查链接并把状态写回，页面显示 ✓/?/✗ 与检查日期。
 

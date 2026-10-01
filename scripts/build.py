@@ -9,6 +9,7 @@ Usage
 
 Data folder layout (see references/data-schema.md)
   meta.json  works.json  teams.json  repos.json  timeline.json  portals.json (optional)
+  (repos.json may be absent/empty when every direction is marked "repo_expected": false, e.g. wet-lab topics)
   narrative/{summary,scope,challenges,caveats}.html
 
 Third-party assets inlined into the output
@@ -73,6 +74,10 @@ LABELS = {
   th_portal="名称", th_kind="类型", th_org="机构", th_scope="覆盖范围/数据", th_access="访问方式", th_url="链接状态", all_kinds="全部类型",
   url_ok="✓ 可访问", url_dead="✗ 无法访问", url_blocked="? 拒绝脚本访问", url_unchecked="未检查",
   featured_only="★ 仅里程碑", featured_tip="里程碑/旗舰工作", preprint_link="预印本", act_stable="成熟稳定（低频更新）",
+  oss_by_dir="各方向开源情况", oss_norepo_dirs="以实验为主、不发布代码仓库的方向", no_repo_badge="无代码仓库",
+  no_repo_default="该方向以湿实验为主，通常不发布代码仓库。", alt_resources="可用的非代码资源（数据集/实验方案/数据门户/生物样本库）：",
+  repos_n="{n} 个仓库", repos_none="本报告未收录该方向的仓库",
+  desc_oss_none="本报告收录的方向以实验研究为主，通常不发布代码仓库，因此未收录 GitHub 仓库；各方向可用的数据集、实验方案与数据门户见下。",
   footer="本报告基于公开资料整理（检查日期 {check}）。“自报”“未核实”等标注请留意；引用时请以原始来源为准。"),
  "en": dict(
   toc="Contents", sec_summary="Executive summary", sec_scope="Scope, method & counting rules", sec_timeline="Timeline",
@@ -106,6 +111,11 @@ LABELS = {
   th_portal="Name", th_kind="Type", th_org="Organisation", th_scope="Coverage / data", th_access="Access", th_url="Link status", all_kinds="All types",
   url_ok="✓ reachable", url_dead="✗ unreachable", url_blocked="? blocks scripts", url_unchecked="not checked",
   featured_only="★ Landmarks only", featured_tip="landmark / flagship work", preprint_link="preprint", act_stable="Mature (infrequent updates)",
+  oss_by_dir="Open source by direction", oss_norepo_dirs="Experimental directions without code repositories", no_repo_badge="no code repos",
+  no_repo_default="Mainly wet-lab / experimental work; code repositories are usually not released.",
+  alt_resources="Non-code resources (datasets, protocols, data portals, biobanks):",
+  repos_n="{n} repos", repos_none="no repository included",
+  desc_oss_none="The directions covered are mainly experimental and usually do not release code, so no GitHub repositories are listed; datasets, protocols and portals per direction are shown below.",
   footer="Compiled from public sources (checked {check}). Mind the 'self-reported' / 'unverified' labels; cite original sources."),
 }
 DEFAULT_LEVELS = {"zh": ["原型/基准", "论文或开源系统", "高影响力发表或实验验证", "产品化/规模化应用"],
@@ -209,6 +219,24 @@ def normalise_world(path, merge=None, drop=("AQ",)):
 
 
 # ---------------------------------------------------------------- validation & derivation
+def repo_info(d):
+    """(repo_expected, reason) for a direction. Directions whose work is wet-lab/experimental can opt out of code
+    repos with `"repo_expected": false` (+ optional `"no_repo_reason"`), or the alias `"no_repo": true | "reason"`."""
+    nr = d.get("no_repo")
+    expected = d.get("repo_expected", True) is not False and not nr
+    reason = d.get("no_repo_reason") or (nr if isinstance(nr, str) else "")
+    return expected, str(reason or "").strip()
+
+
+def norm_resources(v):
+    """Direction `resources`: list of {name, url, kind, note} (a bare string = name only)."""
+    out = []
+    for x in v or []:
+        x = {"name": x} if isinstance(x, str) else dict(x or {})
+        out.append({k: str(x.get(k) or "").strip() for k in ("name", "url", "kind", "note")})
+    return out
+
+
 DATE_RE = re.compile(r"^\d{4}(-\d{2}(-\d{2})?)?$")
 
 
@@ -252,6 +280,21 @@ def validate(meta, works, teams, repos, events, portals=()):
             err(f"meta.time_range.{k} must be YYYY, YYYY-MM or YYYY-MM-DD")
     if tr.get("start") and tr.get("end") and tr["start"] > tr["end"]:
         err("meta.time_range.start is after meta.time_range.end")
+    no_repo = set()
+    for i, d in enumerate(meta.get("directions", [])):
+        tag = f"directions[{i}] {d.get('key', '?')}"
+        if "repo_expected" in d and not isinstance(d["repo_expected"], bool):
+            err(f"{tag}: repo_expected must be true/false")
+        if not repo_info(d)[0]:
+            no_repo.add(d.get("key"))
+        if d.get("resources") is not None and not isinstance(d["resources"], list):
+            err(f"{tag}: resources must be a list of {{name, url, kind, note}}")
+        else:
+            for j, x in enumerate(norm_resources(d.get("resources"))):
+                if not x["name"]:
+                    err(f"{tag}: resources[{j}] missing 'name'")
+                elif not x["url"]:
+                    warn(f"{tag}: resources[{j}] {x['name']}: no 'url' (link the dataset/protocol/portal page if one exists)")
     phases = {p["key"] for p in meta.get("phases", [])}
     seen = {}
     for i, w in enumerate(works):
@@ -327,9 +370,15 @@ def validate(meta, works, teams, repos, events, portals=()):
     if works and not any(w.get("featured") for w in works):
         warn("no work has featured=true: tree leaves are picked automatically "
              f"(tree_sort={meta.get('tree_sort', 'auto')}); mark landmark/flagship works with \"featured\": true")
+    # NB: a direction with zero repos is fine (no warning) — many directions, e.g. wet-lab ones, publish no code
     for i, r in enumerate(repos):
         if not r.get("repo") or "/" not in r["repo"]:
             err(f"repos[{i}]: 'repo' must be owner/name")
+        for d in as_list(r.get("dirs")):
+            if d not in dk:
+                err(f"repos[{i}] {r.get('repo')}: unknown direction '{d}'")
+            elif d in no_repo:
+                warn(f"repos[{i}] {r.get('repo')}: direction '{d}' is marked repo_expected=false but has this repo — drop the flag or the tag")
         if r.get("stars") is None:
             warn(f"repos[{i}] {r.get('repo')}: no stars yet -> run github_repos.py")
 
@@ -378,7 +427,7 @@ def derive(meta, works, teams, repos, events, lang, portals=()):
                               actLabel=act_label, stable=act_label != act,
                               cat=r.get("cat", "—"), what=r.get("what") or r.get("description", ""),
                               arch=r.get("arch", ""), run=r.get("run", ""), deps=r.get("deps", ""), lim=r.get("lim", ""),
-                              archived=bool(r.get("archived"))))
+                              archived=bool(r.get("archived")), dirs=";".join(as_list(r.get("dirs")))))
     out_repos.sort(key=lambda x: -x["stars"])
 
     # references (unique by URL)
@@ -408,9 +457,19 @@ def derive(meta, works, teams, repos, events, lang, portals=()):
 
     dirs = {}
     for i, d in enumerate(meta["directions"]):
+        expected, reason = repo_info(d)
         dirs[d["key"]] = dict(name=d["name"], en=d.get("en", ""), short=d.get("short") or d["name"],
                               color=d.get("color") or PALETTE[i % len(PALETTE)],
                               summary=d.get("summary", ""), challenges=d.get("challenges", ""))
+        if not expected:  # no-code direction: note + non-code resources (own list, then portals tagged with it)
+            res = norm_resources(d.get("resources"))
+            urls = {x["url"] for x in res if x["url"]}
+            res += [dict(name=p["name"], url=p["url"], kind=p["kind"] or L["sec_portals"], note="")
+                    for p in out_portals if d["key"] in as_list(p["dirs"]) and p["url"] not in urls]
+            dirs[d["key"]].update(repo_expected=False, no_repo_note=reason, resources=res)
+            for x in res:
+                if x["url"]:
+                    add(x["name"], x["url"], x["kind"] or L["alt_resources"].rstrip("：:"))
     cats = meta.get("event_categories", {})
     for i, c in enumerate(sorted({e.get("cat", "") for e in events} - set(cats))):
         cats[c] = PALETTE[(i + 3) % len(PALETTE)]
@@ -453,7 +512,8 @@ def render(d, out, world_arg=None, echarts_arg=None, no_download=False):
         sys.exit("meta.json is required")
     works = load(d, "works.json", [])
     teams = load(d, "teams.json", [])
-    repos = load(d, "repos.json", [])
+    all_norepo = bool(meta.get("directions")) and all(not repo_info(x)[0] for x in meta["directions"])
+    repos = [] if all_norepo and not os.path.exists(os.path.join(d, "repos.json")) else load(d, "repos.json", [])
     events = load(d, "timeline.json", [])
     portals = load(d, "portals.json", []) if os.path.exists(os.path.join(d, "portals.json")) else []
     validate(meta, works, teams, repos, events, portals)
@@ -490,6 +550,8 @@ def render(d, out, world_arg=None, echarts_arg=None, no_download=False):
         f'<div class="dcard" style="--c:{v["color"]}"><div class="dh"><span class="dk">{esc(k)}</span><h3>{esc(v["name"])}</h3>'
         f'<span class="den">{esc(v["en"])}</span></div><p>{v["summary"]}</p>'
         + (f'<p class="dchal"><b>{L["main_challenge"]}</b>{v["challenges"]}</p>' if v["challenges"] else "")
+        + (f'<p class="legend-note"><span class="tag nrb">{esc(L["no_repo_badge"])}</span> {esc(v["no_repo_note"] or L["no_repo_default"])}</p>'
+           if v.get("repo_expected") is False else "")
         + f'<a class="dlink" href="#works" onclick="filterDir(\'{esc(k)}\')">{L["see_works"]}</a></div>'
         for k, v in data["dirs"].items())
     phase_cards = "".join(
@@ -506,7 +568,7 @@ def render(d, out, world_arg=None, echarts_arg=None, no_download=False):
         "CAVEATS": narrative("caveats"),
         "FOOTER": meta.get("footer") or L["footer"].format(check=check),
         "DESC_TEAMS": L["desc_teams"].format(levels=lv),
-        "DESC_OSS": L["desc_oss"].format(check=check, t0=th[0], t1=th[1], t2=th[2]),
+        "DESC_OSS": L["desc_oss"].format(check=check, t0=th[0], t1=th[1], t2=th[2]) if data["repos"] else L["desc_oss_none"],
         "DESC_PORTALS": L["desc_portals"].format(checked=data["portalsChecked"] or L["url_unchecked"]),
     }
     for k, v in L.items():

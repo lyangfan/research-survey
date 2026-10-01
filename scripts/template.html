@@ -66,10 +66,26 @@ main h2 .no{display:inline-grid;place-items:center;width:32px;height:32px;border
 .dcard p{font-size:14px;margin:8px 0 4px;color:#374151}.dcard .dchal{color:#7c2d12;background:#fff7ed;border-radius:8px;padding:6px 10px;font-size:13px}.dlink{font-size:13px;font-weight:700}
 .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:6px}
 .toolbar input,.toolbar select{border:1px solid var(--line);border-radius:10px;padding:7px 12px;font-size:14px;font-family:inherit;background:#fff}
-.toolbar input{min-width:260px}
+.toolbar input{min-width:min(260px,100%)}
 .count{color:var(--muted);font-size:13px}
 .tbl-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px;max-height:680px}
-table{border-collapse:collapse;width:100%;font-size:13.5px}#rt{min-width:1100px}#wt{table-layout:fixed}#wt th:nth-child(1){width:72px}#wt th:nth-child(2){width:140px}#wt th:nth-child(3){width:178px}#wt th:nth-child(4){width:130px}#wt th:nth-child(5){width:132px}#wt td{word-break:break-word}#wt .tag{white-space:normal;max-width:100%;display:inline-block;border-radius:7px;line-height:1.45;padding:2px 7px;overflow-wrap:anywhere}
+table{border-collapse:collapse;width:100%;font-size:13.5px}#rt{min-width:1100px}#wt{table-layout:fixed;min-width:640px}#wt td{overflow-wrap:anywhere}#wt .tag{white-space:normal;max-width:100%;display:inline-block;border-radius:7px;line-height:1.45;padding:2px 7px;overflow-wrap:anywhere}
+/* works table: the date column is sized from the font's own digit width (ch), never fixed px, so a wider
+   font (PingFang/YaHei/Segoe, user font settings) cannot push the date into the title; if it is still too
+   narrow the date wraps at the hyphen instead of overflowing. Other columns are proportional. */
+#wt th:nth-child(1){width:calc(9.5ch + 24px)}#wt th:nth-child(2){width:19%}#wt th:nth-child(3){width:16%}#wt th:nth-child(4){width:13%}#wt th:nth-child(5){width:13%}
+#wt td.wd{font-variant-numeric:tabular-nums;color:#334155}#wt .dseg{display:inline-block;white-space:nowrap}
+/* narrow containers: each work becomes a card (date + status on top, then title, directions, institution, contribution) */
+.wt-wrap{container-type:inline-size}
+@container (max-width:760px){
+ #wt{min-width:0}#wt thead{display:none}#wt,#wt tbody{display:block}
+ #wt tr{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:10px;row-gap:5px;align-items:center;padding:12px 14px;border-bottom:1px solid #f0f2f7}
+ #wt td{display:block;padding:0;border:0;min-width:0}
+ #wt td.wd{grid-column:1;grid-row:1;font-size:12.5px;font-weight:700;color:var(--muted);white-space:nowrap}
+ #wt td.ws{grid-column:2;grid-row:1;justify-self:start}
+ #wt td.wn,#wt td.wdirs,#wt td.wi,#wt td.wc{grid-column:1/-1}
+ #wt td.wi{font-size:12.5px;color:var(--muted)}#wt td.wi:empty,#wt td.wc:empty,#wt td.wdirs:empty{display:none}
+}
 #rt td:nth-child(2){white-space:nowrap}#rt td:last-child{min-width:260px}
 th{position:sticky;top:0;background:#f1f5f9;text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;cursor:pointer;z-index:1}
 th:hover{background:#e2e8f0}
@@ -98,6 +114,13 @@ tr:hover td{background:#fafbff}
 .feat{color:#d97706;font-weight:800;margin-right:3px}.pre-link{font-size:11.5px;margin-left:4px;white-space:nowrap}
 #pt{min-width:900px}#pt td:nth-child(1){min-width:150px}
 .ust{font-size:12px;padding:1px 8px;white-space:nowrap}.ust.ok{background:#dcfce7;color:#166534}.ust.dead{background:#fee2e2;color:#991b1b}.ust.blocked{background:#fef9c3;color:#854d0e}.ust.unk{background:#f1f5f9;color:#64748b}
+.odgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin:4px 0 18px;align-items:start}
+.odc{border:1px solid var(--line);border-left:4px solid var(--c);border-radius:10px;padding:9px 12px;background:#fff;font-size:13px;min-width:0;overflow-wrap:anywhere}
+.odc.clk{cursor:pointer}.odc.clk:hover{border-color:var(--c)}.odc.on{box-shadow:0 0 0 2px var(--c)}
+.odc b{font-size:13.5px}.odc .n{color:var(--muted);font-size:12.5px;margin-left:4px}
+.odc.nr{background:#f8fafc}.odc .nrn{margin:4px 0 0;color:#475569;font-size:12.5px;line-height:1.6}
+.odc ul{margin:4px 0 0;padding-left:16px;font-size:12.5px}.odc li{margin:2px 0}
+.tag.nrb{background:#f1f5f9;color:#475569;font-size:11px}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px}
 ol.nice,ul.nice{padding-left:20px}ol.nice li,ul.nice li{margin:6px 0}
 .refs{columns:2;column-gap:28px;font-size:13px}.refs li{break-inside:avoid;margin-bottom:5px}
@@ -150,7 +173,7 @@ footer{text-align:center;color:var(--muted);font-size:12.5px;padding:10px 0 40px
  <select id="wyr"><option value="">{{L_all_years}}</option></select>
  <span class="count" id="wcount"></span>
 </div>
-<div class="tbl-wrap"><table id="wt"><thead><tr><th data-k="date">{{L_th_date}} ▾</th><th data-k="name">{{L_th_name}}</th><th>{{L_th_dirs}}</th><th data-k="inst">{{L_th_inst}}</th><th data-k="status">{{L_th_status}}</th><th>{{L_th_contrib}}</th></tr></thead><tbody></tbody></table></div>
+<div class="tbl-wrap wt-wrap"><table id="wt"><thead><tr><th data-k="date">{{L_th_date}} ▾</th><th data-k="name">{{L_th_name}}</th><th>{{L_th_dirs}}</th><th data-k="inst">{{L_th_inst}}</th><th data-k="status">{{L_th_status}}</th><th>{{L_th_contrib}}</th></tr></thead><tbody></tbody></table></div>
 </section>
 
 <section id="teams" data-req="teams"><h2>{{L_sec_teams}}</h2>
@@ -173,11 +196,15 @@ footer{text-align:center;color:var(--muted);font-size:12.5px;padding:10px 0 40px
 <div class="tbl-wrap"><table id="pt"><thead><tr><th>{{L_th_portal}}</th><th>{{L_th_kind}}</th><th>{{L_th_org}}</th><th>{{L_th_scope}}</th><th>{{L_th_access}}</th><th>{{L_th_url}}</th></tr></thead><tbody></tbody></table></div>
 </section>
 
-<section id="oss" data-req="repos"><h2>{{L_sec_oss}}</h2>
+<section id="oss" data-req="oss"><h2>{{L_sec_oss}}</h2>
 <p class="sdesc">{{DESC_OSS}}</p>
+<h3 id="oss-dirs-h" class="hidden" style="margin:6px 0 8px;font-size:16px"></h3>
+<div class="odgrid hidden" id="oss-dirs"></div>
+<div id="oss-repos" data-req="repos">
 <div class="grid2"><div id="c-stars"></div><div><div id="c-act" style="height:380px"></div><div id="c-actpie" style="height:240px"></div></div></div>
 <div class="chips" id="rcats"></div>
 <div class="tbl-wrap"><table id="rt"><thead><tr><th data-k="repo">{{L_th_repo}}</th><th>{{L_th_cat}}</th><th data-k="stars">{{L_th_stars}} ▾</th><th data-k="forks">{{L_th_forks}}</th><th data-k="last">{{L_th_last}}</th><th>{{L_th_rel}}</th><th data-k="days">{{L_th_act}}</th><th>{{L_th_lic}}</th><th>{{L_th_desc}}</th></tr></thead><tbody></tbody></table></div>
+</div>
 </section>
 
 <section id="trends" data-req="html"><h2>{{L_sec_trends}}</h2>{{CHALLENGES}}</section>
@@ -204,7 +231,9 @@ const ACTC=['#16a34a','#0284c7','#ca8a04','#dc2626'];
 
 // ---------- hide empty sections, number sections, build TOC ----------
 const P=DATA.portals||[];
-const has={works:W.length>0,teams:T.length>0,repos:R.length>0,events:E.length>0,portals:P.length>0};
+// directions marked repo_expected:false (wet-lab / experimental): no code repos by design -> note + non-code resources
+const NOREPO=DK.filter(k=>DIRS[k].repo_expected===false),RDIRS=R.some(r=>r.dirs);
+const has={works:W.length>0,teams:T.length>0,repos:R.length>0,events:E.length>0,portals:P.length>0,oss:R.length>0||NOREPO.length>0};
 document.querySelectorAll('[data-req]').forEach(el=>{const r=el.dataset.req;const ok=r==='html'?el.innerText.trim().split('\n').length>1||el.querySelector('p,ul,ol,div,table'):has[r];if(!ok)el.classList.add('hidden')});
 let secNo=0;document.querySelectorAll('main section').forEach(s=>{if(s.classList.contains('hidden'))return;secNo++;const h=s.querySelector('h2');h.innerHTML=`<span class="no">${secNo}</span>`+h.innerHTML;
  const a=document.createElement('a');a.href='#'+s.id;a.textContent=secNo+' '+h.textContent.replace(/^\d+/,'');document.getElementById('toc').appendChild(a)});
@@ -265,14 +294,26 @@ if(has.events)renderTL();
  const leaves=children.reduce((s,c)=>s+Math.max(1,c.children.length),0);
  const el=document.getElementById('c-tree');el.style.height=Math.max(360,leaves*26+40)+'px';
  const c=mk('c-tree');
- c.setOption({textStyle,tooltip:{trigger:'item',formatter:p=>p.data.full?`<b>${esc(p.data.full)}</b><br>${esc(p.data.status)}`:(p.data.dk?`<b>${esc(p.name)}</b><br>${esc(DIRS[p.data.dk].en)}<br>${L.tree_click}`:esc(p.name))},
-  series:[{type:'tree',data:[{name:DATA.taxRoot,itemStyle:{color:'#4f46e5'},label:{fontSize:15,fontWeight:'bold',color:'#fff',backgroundColor:'#4f46e5',padding:[8,10],borderRadius:8},children}],top:10,left:'14%',bottom:10,right:'26%',symbolSize:11,initialTreeDepth:2,expandAndCollapse:false,
-   label:{position:'left',verticalAlign:'middle',align:'right',fontSize:12.5},leaves:{label:{position:'right',align:'left',color:'#374151',fontSize:12}},lineStyle:{color:'#c7d2fe',width:1.4,curveness:.5},animationDuration:500}]});
+ // width-aware layout: margins come from measured label widths, labels are capped so nothing runs off the
+ // canvas or into a neighbour at narrow widths (leaves truncate with …, full name in the tooltip; direction names wrap)
+ const cx=document.createElement('canvas').getContext('2d');
+ const tw=(s,px,b)=>{cx.font=(b?'bold ':'')+px+'px '+textStyle.fontFamily;return Math.max(0,...String(s).split('\n').map(x=>cx.measureText(x).width))};
+ const rootW=tw(DATA.taxRoot,15,true)+20,leafMax=Math.max(40,...children.flatMap(d=>d.children.map(x=>tw(x.name,12)))),dirMax=Math.max(40,...children.map(d=>tw(d.name,12.5,true)));
+ function layoutTree(){
+  const w=el.clientWidth||800,leafW=Math.min(leafMax,Math.max(90,w*0.36)),left=Math.min(rootW+16,w*0.3),right=leafW+22;
+  const dirW=Math.max(56,Math.min(dirMax,(w-left-right)/2-18));
+  c.setOption({textStyle,tooltip:{trigger:'item',formatter:p=>p.data.full?`<b>${esc(p.data.full)}</b><br>${esc(p.data.status)}`:(p.data.dk?`<b>${esc(p.name)}</b><br>${esc(DIRS[p.data.dk].en)}<br>${L.tree_click}`:esc(p.name))},
+   series:[{type:'tree',data:[{name:DATA.taxRoot,itemStyle:{color:'#4f46e5'},label:{fontSize:15,fontWeight:'bold',color:'#fff',backgroundColor:'#4f46e5',padding:[8,10],borderRadius:8,width:null,overflow:'none'},children}],top:10,left,bottom:10,right,symbolSize:11,initialTreeDepth:2,expandAndCollapse:false,
+    label:{position:'left',verticalAlign:'middle',align:'right',fontSize:12.5,width:dirW,overflow:'break',lineHeight:16},leaves:{label:{position:'right',align:'left',color:'#374151',fontSize:12,width:leafW,overflow:'truncate',ellipsis:'…'}},lineStyle:{color:'#c7d2fe',width:1.4,curveness:.5},animationDuration:500}]});
+ }
+ layoutTree();window.addEventListener('resize',layoutTree);
  c.on('click',p=>{if(p.data&&p.data.dk){filterDir(p.data.dk);document.getElementById('works').scrollIntoView()}});
 })();
 
 // ---------- works table ----------
 let wDir=null,wSort={k:'date',d:-1};
+// "2026-08-06" -> "2026-" + "08-06": may wrap at the hyphen but never overflows into the next column
+const dseg=d=>{const m=String(d||'').match(/^(\d{4}-)(.+)$/);return m?`<span class="dseg">${esc(m[1])}</span><wbr><span class="dseg">${esc(m[2])}</span>`:`<span class="dseg">${esc(d)}</span>`};
 document.getElementById('wdirs').innerHTML=`<span class="chip on" data-d="">${L.all_dirs}</span>`+DK.map(k=>`<span class="chip" data-d="${k}"><i style="background:${DC[k]}"></i>${esc(DIRS[k].short)} <small>(${W.filter(w=>dl(w.dirs).includes(k)).length})</small></span>`).join('');
 document.querySelectorAll('#wdirs .chip').forEach(ch=>ch.onclick=()=>filterDir(ch.dataset.d||null));
 if(W.some(w=>w.featured)){const o=document.createElement('option');o.value='f';o.textContent=L.featured_only;document.getElementById('wst').appendChild(o)}
@@ -285,7 +326,7 @@ function renderW(){
  let ws=W.filter(w=>(!wDir||dl(w.dirs).includes(wDir))&&(st===''||(st==='f'?w.featured:String(+w.peer)===st))&&(!yr||w.date.startsWith(yr))&&(!q||(w.name+(w.title||'')+w.inst+w.contrib+w.status).toLowerCase().includes(q)));
  ws.sort((a,b)=>String(a[wSort.k]).localeCompare(String(b[wSort.k]),'zh')*wSort.d);
  document.getElementById('wcount').textContent=L.count.replace('{n}',ws.length).replace('{p}',ws.filter(w=>w.peer).length);
- document.querySelector('#wt tbody').innerHTML=ws.map(w=>`<tr><td style="white-space:nowrap">${esc(w.date)}</td><td>${w.featured?`<span class="feat" title="${esc(L.featured_tip)}">★</span>`:''}<a class="nm" href="${safeUrl(w.url)}" target="_blank" rel="noopener" title="${esc(w.title||'')}">${esc(w.name)}</a>${w.preprint_url?`<a class="pre-link" href="${safeUrl(w.preprint_url)}" target="_blank" rel="noopener">[${esc(L.preprint_link)}]</a>`:''}</td><td>${dtags(w.dirs)}</td><td>${esc(w.inst)}</td><td><span class="tag ${w.peer?'peer':'pre'}">${esc(w.status)}</span></td><td>${esc(w.contrib)}</td></tr>`).join('');
+ document.querySelector('#wt tbody').innerHTML=ws.map(w=>`<tr><td class="wd">${dseg(w.date)}</td><td class="wn">${w.featured?`<span class="feat" title="${esc(L.featured_tip)}">★</span>`:''}<a class="nm" href="${safeUrl(w.url)}" target="_blank" rel="noopener" title="${esc(w.title||'')}">${esc(w.name)}</a>${w.preprint_url?`<a class="pre-link" href="${safeUrl(w.preprint_url)}" target="_blank" rel="noopener">[${esc(L.preprint_link)}]</a>`:''}</td><td class="wdirs">${dtags(w.dirs)}</td><td class="wi">${esc(w.inst)}</td><td class="ws"><span class="tag ${w.peer?'peer':'pre'}">${esc(w.status)}</span></td><td class="wc">${esc(w.contrib)}</td></tr>`).join('');
 }
 renderW();
 
@@ -333,6 +374,20 @@ if(has.teams){
 // ---------- repos ----------
 // long owner/name labels: keep both ends ("farmGTEx/Cattl…Pipeline_v0"), full name in the tooltip
 function midTrunc(s,n){s=String(s);if(s.length<=n)return s;const a=Math.ceil((n-1)*0.45);return s.slice(0,a)+'…'+s.slice(s.length-(n-1-a))}
+let rDir=null,renderR=()=>{};
+// per-direction coverage: repo counts when repos carry `dirs`; directions with repo_expected:false get a short
+// note (why there is no code) plus their non-code resources (datasets, protocols, portals, biobanks) instead of an empty entry
+(function(){
+ const ks=RDIRS?DK:NOREPO;if(!ks.length)return;
+ const res=x=>`<li>${x.url?`<a href="${safeUrl(x.url)}" target="_blank" rel="noopener">${esc(x.name)}</a>`:esc(x.name)}${x.kind?` <span class="tag">${esc(x.kind)}</span>`:''}${x.note?` <span class="legend-note">${esc(x.note)}</span>`:''}</li>`;
+ const card=k=>{const d=DIRS[k];
+  if(d.repo_expected===false)return `<div class="odc nr" style="--c:${DC[k]}"><b>${esc(d.short)}</b> <span class="tag nrb">${esc(L.no_repo_badge)}</span><p class="nrn">${esc(d.no_repo_note||L.no_repo_default)}</p>${(d.resources||[]).length?`<div class="legend-note" style="margin-top:4px">${esc(L.alt_resources)}</div><ul>${d.resources.map(res).join('')}</ul>`:''}</div>`;
+  const n=R.filter(r=>dl(r.dirs).includes(k)).length;
+  return n?`<div class="odc clk" data-k="${esc(k)}" style="--c:${DC[k]}"><b>${esc(d.short)}</b><span class="n">${esc(L.repos_n.replace('{n}',n))}</span></div>`:`<div class="odc" style="--c:${DC[k]}"><b>${esc(d.short)}</b><span class="n">${esc(L.repos_none)}</span></div>`};
+ const h=document.getElementById('oss-dirs-h');h.textContent=RDIRS?L.oss_by_dir:L.oss_norepo_dirs;h.classList.remove('hidden');
+ const g=document.getElementById('oss-dirs');g.innerHTML=ks.map(card).join('');g.classList.remove('hidden');
+ g.querySelectorAll('.odc.clk').forEach(el=>el.onclick=()=>{rDir=rDir===el.dataset.k?null:el.dataset.k;g.querySelectorAll('.odc.clk').forEach(x=>x.classList.toggle('on',x.dataset.k===rDir));renderR()});
+})();
 if(has.repos){
  const N=Math.min(DATA.topN,R.length),top=R.slice(0,N).reverse();
  const lmin=Math.pow(10,Math.floor(Math.log10(Math.max(1,Math.min(...R.map(r=>r.stars||1))))));
@@ -348,12 +403,12 @@ if(has.repos){
  document.getElementById('rcats').innerHTML=`<span class="chip on" data-c="">${L.all_cats}</span>`+rcats.map(c=>`<span class="chip" data-c="${esc(c)}">${esc(c)} (${R.filter(r=>r.cat===c).length})</span>`).join('');
  document.querySelectorAll('#rcats .chip').forEach(ch=>ch.onclick=()=>{rCat=ch.dataset.c||null;document.querySelectorAll('#rcats .chip').forEach(x=>x.classList.toggle('on',x===ch));renderR()});
  document.querySelectorAll('#rt th[data-k]').forEach(th=>th.onclick=()=>{const k=th.dataset.k;rSort={k,d:rSort.k===k?-rSort.d:((k==='stars'||k==='forks'||k==='last')?-1:1)};renderR()});
- function renderR(){
-  let rs=R.filter(r=>!rCat||r.cat===rCat);
+ renderR=function(){
+  let rs=R.filter(r=>(!rCat||r.cat===rCat)&&(!rDir||dl(r.dirs).includes(rDir)));
   rs.sort((a,b)=>{const x=a[rSort.k],y=b[rSort.k];return (typeof x==='number'?x-y:String(x).localeCompare(String(y)))*rSort.d});
-  document.querySelector('#rt tbody').innerHTML=rs.map((r,i)=>`<tr style="cursor:pointer" onclick="document.getElementById('rd${i}').classList.toggle('open')"><td><a class="nm" href="https://github.com/${esc(r.repo)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(r.repo)}</a>${r.archived?' <span class="tag">archived</span>':''}</td><td>${esc(r.cat)}</td><td>${r.stars.toLocaleString()}</td><td>${r.forks.toLocaleString()}</td><td style="white-space:nowrap">${esc(r.last)}</td><td style="font-size:12px">${esc(r.rel)}</td><td><span class="act a${r.stable?5:r.actIdx+1}" title="${esc(r.act)}">${esc(r.actLabel||r.act)}</span></td><td style="font-size:12px" title="${esc(r.license)}">${esc(r.license.length>28?r.license.slice(0,28)+'…':r.license)}</td><td>${esc(r.what)}</td></tr>
+  document.querySelector('#rt tbody').innerHTML=rs.map((r,i)=>`<tr style="cursor:pointer" onclick="document.getElementById('rd${i}').classList.toggle('open')"><td><a class="nm" href="https://github.com/${esc(r.repo)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(r.repo)}</a>${r.archived?' <span class="tag">archived</span>':''}${r.dirs?`<div>${dtags(r.dirs)}</div>`:''}</td><td>${esc(r.cat)}</td><td>${r.stars.toLocaleString()}</td><td>${r.forks.toLocaleString()}</td><td style="white-space:nowrap">${esc(r.last)}</td><td style="font-size:12px">${esc(r.rel)}</td><td><span class="act a${r.stable?5:r.actIdx+1}" title="${esc(r.act)}">${esc(r.actLabel||r.act)}</span></td><td style="font-size:12px" title="${esc(r.license)}">${esc(r.license.length>28?r.license.slice(0,28)+'…':r.license)}</td><td>${esc(r.what)}</td></tr>
   <tr class="det" id="rd${i}"><td colspan="9"><dl><dt>${L.det_arch}</dt><dd>${esc(r.arch)||'—'}</dd><dt>${L.det_run}</dt><dd>${esc(r.run)||'—'}</dd><dt>${L.det_deps}</dt><dd>${esc(r.deps)||'—'}</dd><dt>${L.det_lim}</dt><dd>${esc(r.lim)||'—'}</dd></dl></td></tr>`).join('');
- }
+ };
  renderR();
 }
 
