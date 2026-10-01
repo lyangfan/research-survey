@@ -7,6 +7,8 @@ No key needed. Add SURVEY_MAILTO=you@example.org to join the "polite" pool (fast
 Examples
   python search_crossref.py doi 10.1038/s41586-025-09640-5
   python search_crossref.py title "Accelerating scientific discovery with Co-Scientist" --rows 3
+  python search_crossref.py title "self-driving laboratory" --rows 50 --out cr.jsonl
+  # --from only when the user explicitly asked for a time range (no date filter by default)
   python search_crossref.py title "self-driving laboratory" --from 2024-01-01 --rows 50 --out cr.jsonl
 """
 import argparse
@@ -61,7 +63,7 @@ if __name__ == "__main__":
     ap.add_argument("cmd", choices=["doi", "title"])
     ap.add_argument("query")
     ap.add_argument("--rows", type=int, default=5)
-    ap.add_argument("--from", dest="d_from")
+    ap.add_argument("--from", dest="d_from", help="YYYY-MM-DD; optional; no date filter unless given (pass only when the user asked for a time range)")
     ap.add_argument("--out", default="-")
     a = ap.parse_args()
     write_jsonl(a.out, by_doi(a.query) if a.cmd == "doi" else by_title(a.query, a.rows, a.d_from))

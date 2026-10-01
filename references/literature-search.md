@@ -1,6 +1,8 @@
 # 如何查文献（Literature Search Playbook）
 
-目标：在给定主题与时间范围内，**尽量完整、可复核**地找到代表性工作，并为每条记录留下来源、标识符（DOI / arXiv ID / PMID）、发表状态与核查日期。
+目标：在给定主题内（如用户明确指定了时间范围，则在该范围内），**尽量完整、可复核**地找到代表性工作，并为每条记录留下来源、标识符（DOI / arXiv ID / PMID）、发表状态与核查日期。
+
+> **时间范围规则**：本技能**没有默认时间范围**。只有用户明确要求时，才把时间范围作为约束加到检索（下文各数据源的日期参数/语法）和筛选中；用户没提就不加任何日期过滤，也不按年份排除条目。下文出现的日期参数与日期语法都只是“用户指定了时间范围时”的写法示例。报告“范围与方法”写明用户指定的范围，或“未设时间限制”。
 
 > 适用的 API 限制与行为在 2026 年会变化（例如 OpenAlex 自 2026-02 起要求 API key）。遇到与本文不一致的情况，以官方文档为准，并在报告“范围与方法”中写明实际做法。
 
@@ -18,10 +20,10 @@
 
 | 数据源 | 语法要点 | 例子 |
 |---|---|---|
-| arXiv | 字段前缀 `ti:` `abs:` `au:` `cat:`，`AND/OR/ANDNOT`，短语用双引号，日期 `submittedDate:[YYYYMMDDHHMM TO …]` | `abs:"scientific discovery" AND (abs:agent OR abs:agents) AND cat:cs.AI` |
-| Semantic Scholar `/paper/search` | 纯文本相关性检索，`year=2024-2026`；`/paper/search/bulk` 支持 `+ | - " *` 布尔语法 | `"AI scientist" | "research agent"` |
-| OpenAlex | `search=` 全文相关性；`filter=from_publication_date:…,type:article` | `search=self-driving laboratory` |
-| PubMed | `[tiab]` `[mh]`（MeSH）、`AND/OR/NOT`、截词 `*` | `("self-driving lab*"[tiab] OR "autonomous laborator*"[tiab]) AND 2024:2026[dp]` |
+| arXiv | 字段前缀 `ti:` `abs:` `au:` `cat:`，`AND/OR/ANDNOT`，短语用双引号；（仅用户指定时间范围时）日期 `submittedDate:[YYYYMMDDHHMM TO …]` | `abs:"scientific discovery" AND (abs:agent OR abs:agents) AND cat:cs.AI` |
+| Semantic Scholar `/paper/search` | 纯文本相关性检索，（仅用户指定时间范围时）`year=2024-2026`；`/paper/search/bulk` 支持 `+ | - " *` 布尔语法 | `"AI scientist" | "research agent"` |
+| OpenAlex | `search=` 全文相关性；`filter=type:article`（仅用户指定时间范围时再加 `from_publication_date:…`）| `search=self-driving laboratory` |
+| PubMed | `[tiab]` `[mh]`（MeSH）、`AND/OR/NOT`、截词 `*`；（仅用户指定时间范围时）`2024:2026[dp]` | `("self-driving lab*"[tiab] OR "autonomous laborator*"[tiab])` |
 | Crossref | `query.bibliographic=` 适合按标题核对，不适合主题检索 | — |
 
 4. **迭代**：首轮结果按引用数和相关性浏览前 50–100 条 → 把新出现的术语加入同义词表 → 再检索，直到新增相关条目明显减少（饱和）。把每轮的检索式、日期、命中数记入 `search_log.md`（写进报告的“范围与方法”）。
@@ -30,7 +32,7 @@
 
 ## 2. 各数据源怎么查（Sources & endpoints）
 
-脚本都在 `scripts/` 下，输出统一的 JSONL 候选记录（字段：`source,title,authors,date,venue,doi,arxiv,url,abstract,citations,checked`）。
+脚本都在 `scripts/` 下，输出统一的 JSONL 候选记录（字段：`source,title,authors,date,venue,doi,arxiv,url,abstract,citations,checked`）。所有脚本的日期参数（`--from/--to`、`--year`）都是可选的，**不传就不做日期过滤**；只在用户指定了时间范围时才传。
 
 ### 2.1 arXiv API（预印本主力，CS/物理/数学/q-bio）
 - 端点：`https://export.arxiv.org/api/query?search_query=…&start=0&max_results=100&sortBy=submittedDate&sortOrder=descending`
@@ -40,23 +42,24 @@
   1. 指数退避（脚本已内置：6s→12s→24s…，并遵守 `Retry-After`）。
   2. 仍然 429：停止 arXiv API，改用 **Semantic Scholar batch**（`ids:["ARXIV:2408.06292",…]`）或 **OpenAlex**（arXiv 论文也有收录）补元数据；或直接打开 `https://arxiv.org/abs/<id>` 页面人工核对。
   3. 大批量（上万条）元数据：用 OAI-PMH 或 Kaggle 上的 arXiv metadata 快照，而不是反复调用搜索 API。
-- 脚本：`python scripts/search_arxiv.py --query '…' --from 2024-01-01 --to 2026-10-01 --max 200 --out cand_arxiv.jsonl`；核对标题列表 `--titles titles.txt`。
+- 脚本：`python scripts/search_arxiv.py --query '…' --max 200 --out cand_arxiv.jsonl`；用户指定了时间范围时再加 `--from 2024-01-01 --to 2026-10-01`；核对标题列表 `--titles titles.txt`。
 - 看 `journal_ref` 和 `comment` 字段：作者常在其中写 “Accepted to ICLR 2025”，但这只是线索，需到会议官网/OpenReview 核实。
 
 ### 2.2 Semantic Scholar Graph API（跨学科、引用网络、滚雪球）
-- 搜索：`GET https://api.semanticscholar.org/graph/v1/paper/search?query=…&year=2024-2026&fields=title,externalIds,venue,year,publicationDate,authors,citationCount&limit=100`
+- 搜索：`GET https://api.semanticscholar.org/graph/v1/paper/search?query=…&fields=title,externalIds,venue,year,publicationDate,authors,citationCount&limit=100`
 - 布尔批量：`GET /graph/v1/paper/search/bulk?query=…&token=…`（用 `token` 翻页，最多可拉大量结果）
 - 批量核对：`POST /graph/v1/paper/batch?fields=…`，body `{"ids":["ARXIV:2408.06292","DOI:10.1038/s41586-025-09640-5"]}`（每次 ≤500 个 ID）
 - 引用/参考文献：`GET /graph/v1/paper/{id}/citations`、`/references`
 - **限速**：无 key 时与全球匿名用户共享配额，经常 429；申请免费 key 后设置 `export S2_API_KEY=…`（请求头 `x-api-key`），按约 1 次/秒调用。
+- 年份过滤：仅用户指定时间范围时加 `&year=2024-2026`（脚本 `--year 2024-2026`），否则不加。
 - 脚本：`python scripts/search_s2.py search|bulk|batch|refs|cites …`
 
 ### 2.3 OpenAlex（全学科开放目录，含机构与国家）
-- 搜索：`GET https://api.openalex.org/works?search=…&filter=from_publication_date:2024-01-01,to_publication_date:2026-10-01&per_page=100&cursor=*&api_key=KEY`
+- 搜索：`GET https://api.openalex.org/works?search=…&per_page=100&cursor=*&api_key=KEY`（仅用户指定时间范围时加 `&filter=from_publication_date:2024-01-01,to_publication_date:2026-10-01`）
 - 单条：`GET https://api.openalex.org/works/doi:10.1038/s41586-025-09640-5`（单条查询免费）
 - **2026-02 起需要 API key**（openalex.org 注册即得，免费额度 $1/天：约 1,000 次 search 或 10,000 次 list/filter；单条查询不计费）。无 key 的调用共享按 IP 的极小额度，常见 `429 Insufficient budget`。查看余额：`https://api.openalex.org/rate-limit?api_key=KEY`。
 - 优势：`authorships[].institutions` 和 `countries` 字段可直接辅助“机构/国家”判定（仍需人工复核）。
-- 脚本：`OPENALEX_API_KEY=… python scripts/search_openalex.py search "…" --from 2024-01-01`
+- 脚本：`OPENALEX_API_KEY=… python scripts/search_openalex.py search "…"`（用户指定时间范围时加 `--from … --to …`）
 
 ### 2.4 Crossref（DOI 核对、期刊/会议信息、预印本↔正式版关系）
 - 单条：`GET https://api.crossref.org/works/{DOI}`；按标题核对：`GET https://api.crossref.org/works?query.bibliographic=<title>&rows=3`
@@ -67,14 +70,15 @@
 ### 2.5 bioRxiv / medRxiv（生命科学与医学预印本）
 - **没有关键词搜索接口**。`https://api.biorxiv.org/details/biorxiv/2025-01-01/2025-01-31/0?category=bioinformatics` 按日期窗口（可选学科分类）分页返回全部预印本，需本地按关键词过滤。
 - 单条：`/details/biorxiv/{DOI}`；是否已正式发表：`/pubs/biorxiv/{DOI}`（返回 `published_doi`、`published_journal`）。medRxiv 把 `biorxiv` 换成 `medrxiv`。
-- 窗口太大时按月切片；关键词检索也可以先在 bioRxiv 网站搜索框人工检索，再用 API 补元数据。
-- 脚本：`python scripts/search_biorxiv.py window --from … --to … --category … --kw "language model" --kw agent`
+- 日期窗口是这个 API 的取数方式，不是时间限制：用户没指定时间范围时，窗口取**整个存档**（bioRxiv 2013-11-01 / medRxiv 2019-06-01 至今，脚本不传 `--from/--to` 时自动如此），用 `--category` 缩小扫描量；用户指定了时间范围时才用该范围作窗口。
+- 窗口太大时按月切片（或调大 `--max-pages`；脚本在页数上限截断时会提示未扫完）；关键词检索也可以先在 bioRxiv 网站搜索框人工检索，再用 API 补元数据。
+- 脚本：`python scripts/search_biorxiv.py window --category … --kw "language model" --kw agent [--from … --to …]`
 
 ### 2.6 PubMed（E-utilities）
-- `esearch.fcgi?db=pubmed&term=…&datetype=pdat&mindate=2024&maxdate=2026&retmode=json&retmax=200` → `esummary.fcgi?db=pubmed&id=…`
+- `esearch.fcgi?db=pubmed&term=…&retmode=json&retmax=200` → `esummary.fcgi?db=pubmed&id=…`（仅用户指定时间范围时加 `&datetype=pdat&mindate=2024&maxdate=2026`）
 - 限速：无 key 3 次/秒，`NCBI_API_KEY` 10 次/秒；建议带 `tool` 与 `email` 参数。
 - MeSH 词（`[mh]`）能补全同义词；生物医学主题必查。
-- 脚本：`python scripts/search_pubmed.py '…[tiab]' --from 2024/01/01 --to 2026/10/01`
+- 脚本：`python scripts/search_pubmed.py '…[tiab]'`（用户指定时间范围时加 `--from 2024/01/01 --to 2026/10/01`）
 
 ### 2.7 DBLP（计算机科学会议/期刊的“是否正式发表”权威来源）
 - `https://dblp.org/search/publ/api?q=<title words>&format=json&h=10`；作者页、会议目录页（如 `https://dblp.org/db/conf/iclr/iclr2025.html`）。
@@ -105,8 +109,8 @@
 
 1. 选 5–15 篇**种子论文**：高引综述 + 每个子方向 1–2 篇奠基/代表作。
 2. **后向**（references）：`search_s2.py refs ARXIV:<id>` —— 找被种子引用的早期工作。
-3. **前向**（citations）：`search_s2.py cites ARXIV:<id> --max 1000` —— 找引用种子的新工作（时间范围内的新进展主要来自这里）。
-4. 合并后按“标题关键词命中 + 引用数 + 发表时间”初筛，再人工读摘要。
+3. **前向**（citations）：`search_s2.py cites ARXIV:<id> --max 1000` —— 找引用种子的新工作（新进展主要来自这里）。
+4. 合并后按“标题关键词命中 + 引用数”初筛（用户指定了时间范围时再按发表时间排除范围外条目），再人工读摘要。
 5. 每轮新增相关条目 < 5% 时停止。
 
 ## 4. 合并、去重与筛选（Dedup & screening）
@@ -119,6 +123,7 @@ python scripts/merge_dedup.py candidates.jsonl --screened screening.csv --works-
 - 去重键优先级：**DOI（非 arXiv DOI）> arXiv ID > 规范化标题**；同一工作的预印本与正式版合并为一条，保留两个标识符（`doi` 与 `arxiv`）。
 - `10.48550/arXiv.xxxx` 是 arXiv 自己的 DOI，按 arXiv ID 处理。
 - 同名不同文（例如两个都叫 “AI-Researcher” 的仓库/论文）：靠作者与机构区分，不要只靠名字合并。
+- 时间：只有用户指定了时间范围才按日期筛掉条目（以首次公开日期判断，并在“范围与方法”写明口径）；否则不按年份排除任何相关工作。
 
 ## 5. 标注发表状态（Status）
 

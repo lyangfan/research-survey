@@ -7,15 +7,19 @@ Request a free key (https://www.semanticscholar.org/product/api#api-key-form) an
 export S2_API_KEY=...; with a key keep to ~1 request/second (this script sleeps 1.1 s).
 
 Sub-commands
-  search  relevance search          GET  /graph/v1/paper/search?query=..&year=2024-2026
+  search  relevance search          GET  /graph/v1/paper/search?query=..[&year=2024-2026]
   bulk    boolean bulk search       GET  /graph/v1/paper/search/bulk?query=..&token=..
   batch   metadata for known IDs    POST /graph/v1/paper/batch  {"ids":["ARXIV:2408.06292","DOI:10.1038/.."]}
   refs    backward snowball         GET  /graph/v1/paper/{id}/references
   cites   forward snowball          GET  /graph/v1/paper/{id}/citations
 
+No year filter is applied unless --year is given; pass it only when the user explicitly
+asked for a time range.
+
 Examples
-  python search_s2.py search "autonomous scientific discovery agent" --year 2024-2026 --max 200 --out s2.jsonl
-  python search_s2.py bulk '"AI scientist" | "research agent"' --year 2024- --out bulk.jsonl
+  python search_s2.py search "autonomous scientific discovery agent" --max 200 --out s2.jsonl
+  python search_s2.py search "autonomous scientific discovery agent" --year 2024-2026 --max 200   # user-specified range
+  python search_s2.py bulk '"AI scientist" | "research agent"' --out bulk.jsonl
   python search_s2.py batch --ids ARXIV:2408.06292,DOI:10.1038/s41586-025-09640-5 --out verified.jsonl
   python search_s2.py cites ARXIV:2408.06292 --max 500 --out snowball_fwd.jsonl
 """
@@ -127,7 +131,7 @@ if __name__ == "__main__":
     ap.add_argument("cmd", choices=["search", "bulk", "batch", "refs", "cites"])
     ap.add_argument("query", nargs="?", help="query text / paper id (ARXIV:..., DOI:..., S2 id)")
     ap.add_argument("--ids", help="comma-separated ids for batch, or @file with one id per line")
-    ap.add_argument("--year", help="e.g. 2024-2026 or 2024-")
+    ap.add_argument("--year", help="e.g. 2024-2026 or 2024-; optional; no date filter unless given (pass only when the user asked for a time range)")
     ap.add_argument("--max", type=int, default=100)
     ap.add_argument("--out", default="-")
     a = ap.parse_args()

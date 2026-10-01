@@ -4,14 +4,14 @@
 
 ```
 <data_dir>/
-  meta.json          标题、时间范围、方向（taxonomy）、阶段、颜色、地图设置……
+  meta.json          标题、时间范围（仅用户指定时）、方向（taxonomy）、阶段、颜色、地图设置……
   works.json         代表性工作（论文/预印本/博客/产品）
   teams.json         团队/机构
   timeline.json      时间轴事件
   repos.json         开源仓库（手写字段 + github_repos.py 抓取字段）
   narrative/
     summary.html     执行摘要（HTML 片段，可用 .kf-grid/.kf 卡片、<b id="s-works"></b> 自动填数字）
-    scope.html       范围、方法、计数口径
+    scope.html       范围（时间范围：用户指定的范围或“未设时间限制”）、方法、计数口径
     challenges.html  开放挑战与趋势（可用 .two-col / ol.nice）
     caveats.html     注意事项与未核实项
 ```
@@ -24,10 +24,10 @@
 |---|---|---|
 | `title` | ✔ | 页面标题（`<title>`）|
 | `title_html` | | 大标题 HTML，可用 `<span>` 渐变高亮 |
-| `kicker` / `subtitle` | | 顶部小标签 / 副标题（HTML）|
+| `kicker` / `subtitle` | | 顶部小标签 / 副标题（HTML）。`kicker` 缺省时自动生成：有 `time_range` 显示 `RESEARCH SURVEY · 起 – 止`，没有则只显示 `RESEARCH SURVEY` |
 | `lang` | | `zh-CN`（默认）或 `en`，决定界面文案；`labels` 可逐项覆盖（键见 `build.py` 的 `LABELS`）|
 | `check_date` | ✔ | 资料核查日期，也是仓库活跃度的基准日 |
-| `time_range` | ✔ | `{"start":"2024-01","end":"2026-10"}`，决定柱状图横轴 |
+| `time_range` | | **仅当用户明确指定了时间范围时填写**，如 `{"start":"2024-01","end":"2026-10"}`（可只写 `start` 或 `end`）；决定柱状图横轴，`--check` 会提示落在范围外的条目。**没有默认值**：用户没指定就整个省略，表示未设时间限制，此时柱状图横轴按数据中最早到最晚年份自动确定，页面不显示时间段 |
 | `period` | | `half`（默认）/ `year` / `quarter` |
 | `taxonomy_root` | | 树图根节点文字（可含 `\n`）|
 | `directions` | ✔ | `[{key,name,en,short,color,summary,challenges}]`；`key` 用短英文大写（`LIT`），`summary/challenges` 可含 HTML |
