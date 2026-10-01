@@ -1,0 +1,66 @@
+[
+ {
+  "date": "2024-02",
+  "phase": "P1",
+  "cat": "文献研究",
+  "title": "STORM",
+  "desc": "斯坦福维基式长文自动撰写系统（NAACL 2024），后成为热门开源深度研究框架。",
+  "url": "https://arxiv.org/abs/2402.14207"
+ },
+ {
+  "date": "2024-08",
+  "phase": "P2",
+  "cat": "端到端系统",
+  "title": "The AI Scientist v1（Sakana）",
+  "desc": "首个想法-实验-写作-自动审稿全流程框架，单篇成本<15美元。",
+  "url": "https://arxiv.org/abs/2408.06292"
+ },
+ {
+  "date": "2024-09",
+  "phase": "P2",
+  "cat": "文献研究",
+  "title": "PaperQA2：超人文献综合",
+  "desc": "文献问答、综述与矛盾检测达到或超过专家。",
+  "url": "https://arxiv.org/abs/2409.13740"
+ },
+ {
+  "date": "2024-10",
+  "phase": "P2",
+  "cat": "基准评测",
+  "title": "MLE-bench / ScienceAgentBench",
+  "desc": "Kaggle级ML工程与数据驱动科学发现基准。",
+  "url": "https://arxiv.org/abs/2410.07095"
+ },
+ {
+  "date": "2025-02",
+  "phase": "P3",
+  "cat": "创意生成",
+  "title": "Google AI co-scientist",
+  "desc": "多智能体锦标赛式假设生成，生物医学实验验证（2026年发表于Nature）。",
+  "url": "https://arxiv.org/abs/2502.18864"
+ },
+ {
+  "date": "2025-05",
+  "phase": "P3",
+  "cat": "进化搜索",
+  "title": "AlphaEvolve",
+  "desc": "Gemini进化式编码智能体：矩阵乘法新算法、数据中心调度等。",
+  "url": "https://arxiv.org/abs/2506.13131"
+ },
+ {
+  "date": "2025-09",
+  "phase": "P4",
+  "cat": "自主实验室",
+  "title": "CRESt（Nature）",
+  "desc": "MIT多模态机器人平台发现八元素燃料电池催化剂。",
+  "url": "https://doi.org/10.1038/s41586-025-09640-5"
+ },
+ {
+  "date": "2026-03",
+  "phase": "P5",
+  "cat": "端到端系统",
+  "title": "AI Scientist 发表于Nature",
+  "desc": "Sakana/UBC/Oxford系统总结AI Scientist v1/v2。",
+  "url": "https://www.nature.com/articles/s41586-026-10265-5"
+ }
+]

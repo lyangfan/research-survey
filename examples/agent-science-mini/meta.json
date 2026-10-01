@@ -1,0 +1,150 @@
+{
+ "title": "Agent 驱动的自主科学研究发现 · 示例综述（精简版）",
+ "title_html": "Agent 驱动的<span>自主科学研究发现</span>（示例）",
+ "kicker": "RESEARCH SURVEY · EXAMPLE · 2024.01 – 2026.10",
+ "subtitle": "research-survey-html 的示例数据集：从一份真实综述中抽取的 10 篇代表作、8 个团队、8 个时间轴事件与 8 个开源仓库（均为真实条目，检查日期 2026-10-01）。用于演示数据格式与渲染效果，不代表完整综述结论。",
+ "lang": "zh-CN",
+ "check_date": "2026-10-01",
+ "timezone": "Asia/Shanghai",
+ "time_range": {
+  "start": "2024-01",
+  "end": "2026-10"
+ },
+ "period": "half",
+ "taxonomy_root": "Agent驱动的\n自主科学发现",
+ "directions": [
+  {
+   "key": "IDEA",
+   "name": "假设与创意生成",
+   "en": "Hypothesis & Idea Generation",
+   "short": "创意生成",
+   "color": "#8b5cf6",
+   "summary": "主流做法是“文献检索 + LLM生成 + 自动评审/排名”。Stanford的Si等人在ICLR 2025发表的大规模盲评发现，LLM生成的想法被认为更新颖，但可行性稍弱；后续的“执行差距”研究进一步显示，这类想法真正做出来后评分下降更多。Google的AI co-scientist用多智能体锦标赛加上测试时计算扩展来持续改进假设，并做了湿实验验证（<i>Nature</i> 2026）。评测侧有IdeaBench、LiveIdeaBench、ResearchBench、AgentIdeaBench等基准。",
+   "challenges": "新颖性和重要性的自动评估不可靠；生成的想法容易同质化；想法与可执行性之间存在落差。"
+  },
+  {
+   "key": "LIT",
+   "name": "文献综述与深度研究",
+   "en": "Literature & Deep Research",
+   "short": "文献研究",
+   "color": "#0ea5e9",
+   "summary": "FutureHouse的PaperQA2在文献问答、综述和矛盾检测上达到或超过领域专家水平；UW/AI2的OpenScholar发表于<i>Nature</i>（2026-02）。OpenAI、Google的深度研究产品让“多步检索 + 报告”成为通用能力，开源侧有STORM、GPT-Researcher、open_deep_research等。在AI科学家系统里，文献智能体通常是假设生成和查新的前置模块，例如Kosmos单次运行约阅读1500篇论文。",
+   "challenges": "引用幻觉；全文获取受付费墙限制；很难判断“真正的新颖性”；对冲突证据的综合能力有限。"
+  },
+  {
+   "key": "EXP",
+   "name": "自动化实验与ML研究自动化",
+   "en": "Experiment Execution & ML Research Automation",
+   "short": "实验自动化",
+   "color": "#10b981",
+   "summary": "以MLE-bench为中心形成了一个生态：AIDE、R&D-Agent、ML-Master、MLE-STAR、AIRA-dojo不断刷新奖牌率。复现方向有PaperBench、Paper2Code、AutoSOTA。2026年的karpathy/autoresearch把“智能体整夜自主做实验”的范式推向大众，OpenAI则把同类能力用于内部研发。",
+   "challenges": "长程搜索效率低；评估泄露和对指标的过拟合；算力成本高；对研究方向的判断仍依赖人类。"
+  },
+  {
+   "key": "E2E",
+   "name": "端到端AI科学家（论文生成）",
+   "en": "End-to-End AI Scientists",
+   "short": "端到端AI科学家",
+   "color": "#ef4444",
+   "summary": "代表性路线包括：Sakana的AI Scientist（v1模板化 → v2智能体树搜索 → <i>Nature</i> 2026）、Agent Laboratory（人类在环）、CycleResearcher/DeepScientist（研究与评审闭环、长周期探索）、AI-Researcher、InternAgent-1.5、Kosmos（结构化世界模型）、FARS（规模化部署）、ScientistTwo（问题驱动）。在同行评审上，AI Scientist v2、Intology的Zochi（ACL 2025主会）和Autoscience的Carl都宣称取得了突破，其中后两者以公司自报为主。",
+   "challenges": "生成论文的质量和可信度参差不齐；存在选择性报告；会加重审稿负担；署名与责任归属尚不明确。"
+  },
+  {
+   "key": "LAB",
+   "name": "自主实验室与实验室在环",
+   "en": "Self-Driving / Lab-in-the-Loop",
+   "short": "自主实验室",
+   "color": "#f59e0b",
+   "summary": "化学和材料方向：Liverpool移动机器人探索性合成（<i>Nature</i> 2024）、USTC的ChemAgents、MIT的CRESt（<i>Nature</i> 2025）、Toronto的ORGANA/El Agente。生物方向：CRISPR-GPT、BioDiscoveryAgent、Robin（<i>Nature</i> 2026）、Chalmers酵母闭环系统。产业与国家层面有Periodic Labs、Lila的“AI Science Factory”、DeepMind英国自动化实验室和美国DOE Genesis Mission。",
+   "challenges": "物理执行的可靠性很低（压力测试中只有3.3%产出可执行流程）；设备难以通用；成本高；多数系统的湿实验仍由人完成。"
+  },
+  {
+   "key": "EVO",
+   "name": "进化式搜索：算法/数学/架构发现与自我改进",
+   "en": "Evolutionary Program Search & Self-Improvement",
+   "short": "进化搜索",
+   "color": "#6366f1",
+   "summary": "核心是“LLM提出修改 + 可程序化评估器 + 进化/树搜索”。AlphaEvolve已进入Google生产系统并在Google Cloud正式上线，还被用于大规模数学探索；开源侧有OpenEvolve、ShinkaEvolve（ICLR 2026）、LLM-SR、AlphaResearch；自我改进方向有ASI-Arch和Darwin Gödel Machine。数学方面，Aletheia用自然语言的“生成-验证-修订”循环做研究级证明。",
+   "challenges": "设计可靠的评估器很难；存在奖励投机；难以推广到不可程序化评估的科学问题。"
+  },
+  {
+   "key": "BENCH",
+   "name": "基准与评测",
+   "en": "Benchmarks",
+   "short": "基准评测",
+   "color": "#64748b",
+   "summary": "现有基准大致分六类：ML工程/研发（MLE-bench、RE-Bench、MLGym、MLRC-Bench、Speedrunning）；复现（PaperBench、CORE-Bench、SciReplicate、ResearchCodeBench、EXP-Bench）；数据驱动发现（DiscoveryBench、ScienceAgentBench、BixBench）；领域推理（LAB-Bench、SciCode、FrontierScience）；端到端研究（AstaBench、ResearchClawBench、SciAgentArena、ASI-Bench、TruthInsightBench）；创意生成（IdeaBench、ResearchBench、AgentIdeaBench）。发布时的典型成绩：MLE-bench铜牌率16.9%，PaperBench约21%，FrontierScience-Research约25%。",
+   "challenges": "基准趋于饱和且存在数据污染；面向“复现”的设计不等于评估“发现”能力；运行成本高。"
+  }
+ ],
+ "phases": [
+  {
+   "key": "P1",
+   "title": "阶段一 · 工具型科研智能体与“数据到论文”萌芽（2024上半年）",
+   "desc": "LLM智能体从化学/生物工具调用走向更完整的研究子流程：数据到论文、研究想法生成、科学方程发现、实验设计智能体相继出现。"
+  },
+  {
+   "key": "P2",
+   "title": "阶段二 · 端到端AI科学家诞生与评测体系建立（2024下半年）",
+   "desc": "AI Scientist首次贯通“想法→实验→论文→审稿”；大规模人类研究检验LLM想法新颖性；MLE-bench、RE-Bench、ScienceAgentBench等基准奠定评测框架。"
+  },
+  {
+   "key": "P3",
+   "title": "阶段三 · 同行评审突破与多智能体科研系统（2025上半年）",
+   "desc": "AI生成论文首次通过研讨会评审；AI co-scientist、Robin、AlphaEvolve把多智能体与进化搜索推向真实科学问题；深度研究产品化。"
+  },
+  {
+   "key": "P4",
+   "title": "阶段四 · 实验验证、产业化与规模化（2025下半年）",
+   "desc": "Virtual Lab、CRESt登上Nature；Periodic Labs、Lila、Edison等获巨额融资；Kosmos以世界模型支撑长程研究；Agents4Science试水AI作者与AI审稿。"
+  },
+  {
+   "key": "P5",
+   "title": "阶段五 · 顶刊集中发表、前沿实验室内部自动化与安全拐点（2026）",
+   "desc": "AI Scientist、Co-Scientist、Robin、OpenScholar相继发表于Nature；OpenAI宣布“自动化研究实习生”；同时OpenAI–Hugging Face事件暴露自主智能体的失控风险。"
+  }
+ ],
+ "event_categories": {
+  "端到端系统": "#ef4444",
+  "自主实验室": "#f59e0b",
+  "进化搜索": "#6366f1",
+  "创意生成": "#8b5cf6",
+  "文献研究": "#0ea5e9",
+  "基准评测": "#64748b"
+ },
+ "progress_levels": [
+  "原型/基准",
+  "开源系统/论文",
+  "顶刊或实验验证",
+  "产品化/商业部署"
+ ],
+ "activity_thresholds": [
+  30,
+  90,
+  365
+ ],
+ "radar_countries": [
+  "US",
+  "CN",
+  "GB"
+ ],
+ "map": {
+  "merge": {
+   "TW": "CN",
+   "HK": "CN",
+   "MO": "CN"
+  },
+  "zoom": 1.2,
+  "resolution": "50m"
+ },
+ "extra_refs": [
+  {
+   "title": "Sakana AI：AI Scientist-v2 首篇通过同行评审的论文（2025-03-12）",
+   "url": "https://sakana.ai/ai-scientist-first-publication/"
+  },
+  {
+   "title": "综述：From AI for Science to Agentic Science（arXiv:2508.14111）",
+   "url": "https://arxiv.org/abs/2508.14111"
+  }
+ ]
+}

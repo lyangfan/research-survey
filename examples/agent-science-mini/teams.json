@@ -1,0 +1,101 @@
+[
+ {
+  "name": "Sakana AI",
+  "country": "JP",
+  "type": "创业公司",
+  "dirs": [
+   "E2E",
+   "EVO"
+  ],
+  "works": "The AI Scientist v1/v2（Nature 2026）; ShinkaEvolve（ICLR 2026）; DGM（合作）",
+  "progress": 3,
+  "ach": "首篇通过同行评审的全AI生成研讨会论文（ICLR 2025 ICBINB，按预案撤稿）；AI Scientist于2026-03发表于Nature；ShinkaEvolve助力ICFP 2025冠军队。"
+ },
+ {
+  "name": "Google DeepMind",
+  "country": "GB",
+  "type": "企业研究院",
+  "dirs": [
+   "EVO",
+   "LAB",
+   "IDEA"
+  ],
+  "works": "AlphaEvolve; 大规模数学探索（与陶哲轩等）; Aletheia; 英国自动化材料实验室",
+  "progress": 4,
+  "ach": "AlphaEvolve已用于Google数据中心调度、TPU设计、Spanner优化，并在Google Cloud正式GA；Aletheia产出无人工干预的数学论文；2025-12宣布2026年在英国建设自动化材料实验室。"
+ },
+ {
+  "name": "FutureHouse",
+  "country": "US",
+  "type": "非营利研究机构",
+  "dirs": [
+   "LIT",
+   "E2E",
+   "LAB",
+   "BENCH"
+  ],
+  "works": "PaperQA2; Robin（Nature 2026）; Aviary; ether0; LAB-Bench; BixBench",
+  "progress": 3,
+  "ach": "2023年由Sam Rodriques与Andrew White创立；Robin发现ripasudil作为干性AMD候选疗法并于2026-05发表于Nature；平台与产品已转入Edison Scientific。"
+ },
+ {
+  "name": "MIT（Ju Li组 / Buehler Lab）",
+  "country": "US",
+  "type": "高校",
+  "dirs": [
+   "LAB",
+   "IDEA"
+  ],
+  "works": "CRESt（Nature 2025）; SciAgents",
+  "progress": 3,
+  "ach": "CRESt在3个月内探索900+配方并发现八元素燃料电池催化剂（Nature 2025-09）。"
+ },
+ {
+  "name": "Microsoft Research Asia",
+  "country": "CN",
+  "type": "企业研究院",
+  "dirs": [
+   "EXP"
+  ],
+  "works": "R&D-Agent",
+  "progress": 4,
+  "ach": "R&D-Agent开源约1.5万星，2026-09发布v1.0.0。"
+ },
+ {
+  "name": "香港大学 数据智能实验室（黄超组）",
+  "country": "CN",
+  "type": "高校",
+  "dirs": [
+   "E2E",
+   "BENCH"
+  ],
+  "works": "AI-Researcher（NeurIPS 2025）",
+  "progress": 2,
+  "ach": "AI-Researcher开源约5.8k星，并提供Scientist-Bench。",
+  "region": "中国（香港）"
+ },
+ {
+  "name": "Nanyang Technological University（MOOSE-Chem）",
+  "country": "SG",
+  "type": "高校",
+  "dirs": [
+   "IDEA"
+  ],
+  "works": "MOOSE-Chem（ICLR 2025）; MOOSE-Chem2（NeurIPS 2025）",
+  "progress": 2,
+  "ach": "化学假设发现系列工作（与上海AI实验室合作）。"
+ },
+ {
+  "name": "OpenAI",
+  "country": "US",
+  "type": "企业",
+  "dirs": [
+   "EXP",
+   "BENCH",
+   "EVO"
+  ],
+  "works": "MLE-bench; PaperBench; FrontierScience; GPT-5科学加速实验; Research acceleration",
+  "progress": 4,
+  "ach": "2026-09-06宣布达成“自动化研究实习生”目标并公布内部智能体使用数据；目标2028-03实现自动化AI研究员；发布MLE-bench/PaperBench/FrontierScience等基准；2026-07 Hugging Face安全事件后暂停部分RL训练。"
+ }
+]

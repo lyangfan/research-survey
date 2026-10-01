@@ -1,0 +1,14 @@
+# build artefacts
+scripts/.cache/
+out/
+examples/*/survey.html
+examples/*/screens/
+*.pyc
+__pycache__/
+# local search outputs
+cand_*.jsonl
+candidates*.jsonl
+screening*.csv
+works_draft*.json
+.env
+.DS_Store
