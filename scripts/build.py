@@ -47,7 +47,7 @@ LABELS = {
   sec_taxonomy="方向分类体系", sec_works="代表性工作", sec_teams="团队与进展", sec_map="地区热力图",
   sec_oss="开源项目", sec_trends="开放挑战与未来趋势", sec_caveats="注意事项与未核实项", sec_refs="参考文献与资料来源",
   desc_timeline="点击阶段卡片或类别标签可筛选时间轴；点击事件可展开详情与来源链接。下方图表按时间段统计各方向代表作数量（按主方向计）。",
-  desc_taxonomy="把领域划分为若干相互交叉的子方向（一项工作可属于多个方向）。点击树图中的方向节点可跳转并筛选代表作。",
+  desc_taxonomy="把领域划分为若干相互交叉的子方向（一项工作可属于多个方向，第一个为主方向）。每个方向优先显示以它为主方向的里程碑（★）与代表作，空位才用交叉标注的工作补充（虚线圈、灰字）；“+N 篇”表示未画出的工作。点击方向节点或“+N 篇”可跳转并筛选代表作。",
   desc_works="同时收录预印本与同行评审论文，并逐条标注发表状态。可按方向、状态、年份筛选，支持关键词搜索；点击表头排序。",
   desc_teams="进展等级：{levels}。只陈述有公开来源的事实；机构自报结果单独注明。",
   desc_map="颜色深浅代表本报告收录的团队数（或代表作数）。悬停查看数字，点击国家在右侧面板查看团队、方向与代表作。计数口径见“范围与方法”。",
@@ -68,7 +68,8 @@ LABELS = {
   th_repo="仓库", th_cat="分类", th_stars="Stars", th_forks="Forks", th_last="最近提交", th_rel="最近 Release",
   th_act="活跃度", th_lic="许可证", th_desc="简介", det_arch="架构/组件", det_run="如何运行", det_deps="依赖", det_lim="局限",
   source="来源 ↗", all_ev_cats="全部类别", no_events="无匹配事件", main_challenge="主要难题：",
-  see_works="查看该方向代表作 →", tree_click="点击筛选代表作", lic_none="未声明", repo_ref="开源仓库",
+  see_works="查看该方向代表作 →", tree_click="点击筛选代表作", tree_more="+{n} 篇 → 代表作表",
+  tree_more_tip="该方向还有未画出的工作（含交叉标注），点击在代表作表中查看全部", tree_cross_tip="交叉标注（主方向：{dir}）", lic_none="未声明", repo_ref="开源仓库",
   range_since="{start} 起", range_until="截至 {end}",
   sec_portals="数据门户与资源", desc_portals="数据门户、数据库、在线工具与浏览器（区别于开源代码仓库）。“链接状态”来自 check_urls.py 的检查结果（{checked}）；✗ 表示检查时无法访问。",
   th_portal="名称", th_kind="类型", th_org="机构", th_scope="覆盖范围/数据", th_access="访问方式", th_url="链接状态", all_kinds="全部类型",
@@ -84,7 +85,7 @@ LABELS = {
   sec_taxonomy="Taxonomy", sec_works="Representative works", sec_teams="Teams & progress", sec_map="Geographic heatmap",
   sec_oss="Open-source projects", sec_trends="Open challenges & trends", sec_caveats="Caveats & unverified items", sec_refs="References",
   desc_timeline="Click a phase card or category chip to filter; click an event to expand details. The chart counts works per period and primary direction.",
-  desc_taxonomy="Overlapping sub-directions (a work can belong to several). Click a direction node to filter the works table.",
+  desc_taxonomy="Overlapping sub-directions (a work can belong to several; the first is its primary direction). Each direction shows the landmarks (★) and works whose primary direction it is first; cross-tagged works (dashed, grey) only fill free slots; \"+N\" counts works not drawn. Click a direction node or \"+N\" to filter the works table.",
   desc_works="Preprints and peer-reviewed papers are both included and labelled. Filter by direction/status/year, search, click headers to sort.",
   desc_teams="Progress levels: {levels}. Facts only from public sources; self-reported claims are labelled.",
   desc_map="Colour = number of teams (or works) included in this report. Hover for counts; click a country to list teams and works.",
@@ -105,7 +106,8 @@ LABELS = {
   th_repo="Repo", th_cat="Category", th_stars="Stars", th_forks="Forks", th_last="Last commit", th_rel="Latest release",
   th_act="Activity", th_lic="License", th_desc="Summary", det_arch="Architecture", det_run="How to run", det_deps="Dependencies", det_lim="Limitations",
   source="source ↗", all_ev_cats="All categories", no_events="No matching events", main_challenge="Key challenges: ",
-  see_works="See works →", tree_click="click to filter works", lic_none="none declared", repo_ref="repository",
+  see_works="See works →", tree_click="click to filter works", tree_more="+{n} more → works table",
+  tree_more_tip="More works in this direction (incl. cross-tagged) are not drawn; click to list them all", tree_cross_tip="cross-tagged (primary: {dir})", lic_none="none declared", repo_ref="repository",
   range_since="since {start}", range_until="until {end}",
   sec_portals="Data portals & resources", desc_portals="Data portals, databases, web tools and browsers (as opposed to code repositories). Link status comes from check_urls.py ({checked}); ✗ = unreachable when checked.",
   th_portal="Name", th_kind="Type", th_org="Organisation", th_scope="Coverage / data", th_access="Access", th_url="Link status", all_kinds="All types",
@@ -139,6 +141,11 @@ def load(d, name, default):
         return default
     with open(p, encoding="utf-8") as f:
         return json.load(f)
+
+
+def primary_dir(w):
+    """Primary direction of a work: explicit primary_dir, else the first entry of dirs."""
+    return w.get("primary_dir") or (as_list(w.get("dirs")) or [""])[0]
 
 
 def as_list(v):
@@ -307,6 +314,13 @@ def validate(meta, works, teams, repos, events, portals=()):
         for d in as_list(w.get("dirs")):
             if d not in dk:
                 err(f"{tag}: unknown direction '{d}'")
+        if w.get("primary_dir"):
+            if w["primary_dir"] not in dk:
+                err(f"{tag}: unknown primary_dir '{w['primary_dir']}'")
+            elif w["primary_dir"] not in as_list(w.get("dirs")):
+                warn(f"{tag}: primary_dir '{w['primary_dir']}' is not in dirs (it is added to the work's directions)")
+        if w.get("found_via") is not None and not isinstance(w["found_via"], (list, str)):
+            err(f"{tag}: found_via must be a list of strategy tags (e.g. [\"kw:pubmed\", \"snowball:refs\"])")
         if w.get("date") and not DATE_RE.match(w["date"]):
             err(f"{tag}: date must be YYYY, YYYY-MM or YYYY-MM-DD")
         elif tr and _outside(w.get("date", ""), tr):
@@ -363,10 +377,23 @@ def validate(meta, works, teams, repos, events, portals=()):
             if d not in dk:
                 err(f"{tag}: unknown direction '{d}'")
     n_leaves = int(meta.get("tree_leaves", 4))
+    if meta.get("tree_cross", "fill") not in ("fill", "none"):
+        err('meta.tree_cross must be "fill" (cross-tagged works fill free tree slots) or "none"')
+    if meta.get("tree_featured_overflow", "show") not in ("show", "cap"):
+        err('meta.tree_featured_overflow must be "show" (draw all primary landmarks) or "cap" (at most tree_leaves)')
     for k in dk:
-        nf = sum(1 for w in works if w.get("featured") and k in as_list(w.get("dirs")))
+        nf = sum(1 for w in works if w.get("featured") and primary_dir(w) == k)
+        nx = sum(1 for w in works if w.get("featured") and k in as_list(w.get("dirs")) and primary_dir(w) != k)
         if nf > n_leaves:
-            warn(f"direction {k}: {nf} featured works but tree_leaves={n_leaves}; only the first {n_leaves} (by date) are drawn")
+            if meta.get("tree_featured_overflow", "show") == "cap":
+                warn(f"direction {k}: {nf} featured works with primary direction {k} but tree_leaves={n_leaves} and "
+                     f"tree_featured_overflow=cap: only the first {n_leaves} (by date) are drawn, the rest are counted in '+N'")
+            else:
+                warn(f"direction {k}: {nf} featured works with primary direction {k} > tree_leaves={n_leaves}: all are drawn "
+                     f"(the branch exceeds the cap; set tree_featured_overflow=cap or un-feature some to keep it at {n_leaves})")
+        if not nf and nx:
+            warn(f"direction {k}: no featured work has {k} as its PRIMARY direction ({nx} cross-tagged ones only fill free "
+                 f"slots); mark this direction's own landmarks, or put {k} first in their dirs / set primary_dir")
     if works and not any(w.get("featured") for w in works):
         warn("no work has featured=true: tree leaves are picked automatically "
              f"(tree_sort={meta.get('tree_sort', 'auto')}); mark landmark/flagship works with \"featured\": true")
@@ -391,7 +418,13 @@ def derive(meta, works, teams, repos, events, lang, portals=()):
     th = meta.get("activity_thresholds", [30, 90, 365])
     acts = L["act"]
     for w in works:
-        w["dirs"] = ";".join(as_list(w["dirs"]))
+        w["primary"] = primary_dir(w)
+        ds = as_list(w["dirs"])
+        if w["primary"] and w["primary"] not in ds:
+            ds = [w["primary"]] + ds
+        w["dirs"] = ";".join(ds)
+        if isinstance(w.get("found_via"), list):
+            w["found_via"] = ";".join(w["found_via"])
         w.setdefault("inst", "")
         w.setdefault("country", "")
         w.setdefault("contrib", "")
@@ -485,7 +518,8 @@ def derive(meta, works, teams, repos, events, lang, portals=()):
     # period: explicit meta.period wins; otherwise pick by the span (long histories -> years)
     span = y1 - y0 + 1
     period = meta.get("period") or ("year" if span > 6 else "quarter" if span <= 1 else "half")
-    # taxonomy-tree leaf selection: featured works always first, then tree_sort
+    # taxonomy-tree leaf selection (see template.html pick()): primary-direction landmarks first, then the
+    # direction's own works by tree_sort, then cross-tagged works only for free slots, "+N" for the rest
     ts = meta.get("tree_sort", "auto")
     if ts == "auto":
         ts = "citations" if any(w.get("citations") for w in works) else ("recent" if tr else "spread")
@@ -496,7 +530,8 @@ def derive(meta, works, teams, repos, events, lang, portals=()):
                 years=[y0, y1], period=period, radar=radar, treeSort=ts, portals=out_portals,
                 portalsChecked=max((p["url_checked"] for p in out_portals if p["url_checked"]), default=""),
                 taxRoot=meta.get("taxonomy_root") or meta.get("title", ""), topN=int(meta.get("repo_top_n", 30)),
-                treeLeaves=int(meta.get("tree_leaves", 4)), mapCenter=meta.get("map", {}).get("center"),
+                treeLeaves=int(meta.get("tree_leaves", 4)), treeCross=meta.get("tree_cross", "fill"),
+                treeOverflow=meta.get("tree_featured_overflow", "show"), mapCenter=meta.get("map", {}).get("center"),
                 mapZoom=meta.get("map", {}).get("zoom", 1.2))
     return data, L, check, th, levels
 
@@ -519,6 +554,17 @@ def render(d, out, world_arg=None, echarts_arg=None, no_download=False):
     validate(meta, works, teams, repos, events, portals)
     for w in warnings:
         print("[warn]", w)
+    fv = collections.Counter(t.split(":")[0] for w in works for t in as_list(w.get("found_via")))
+    if fv:
+        n_fv = sum(1 for w in works if as_list(w.get("found_via")))
+        print(f"[info] found_via recorded for {n_fv}/{len(works)} works; strategies: "
+              + ", ".join(f"{k}={v}" for k, v in fv.most_common()) + " (state them in narrative/scope.html)")
+        if set(fv) <= {"kw", "db"}:
+            print("[info] only keyword search is recorded in found_via: add tool-name queries, snowballing and "
+                  "portal/repo mining, and measure recall (references/literature-search.md §1b)")
+    elif works:
+        print("[info] no work records found_via (which retrieval strategy found it); see references/literature-search.md §1b "
+              "— recall_check.py coverage needs it for the per-direction source table")
     if errors:
         for e in errors:
             print("[error]", e)

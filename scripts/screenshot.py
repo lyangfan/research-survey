@@ -7,12 +7,17 @@ works, teams, map, portals, oss, trends, caveats, refs — whatever the report c
 console errors / page errors, horizontal overflow, empty charts and missing CJK glyph rendering
 hints. Exit code 1 on errors.
 
-Browser: uses Playwright's bundled Chromium when installed; otherwise it auto-detects a system
-Chrome/Chromium (google-chrome, chromium, chromium-browser, msedge, the macOS app bundles, or
-$CHROME_PATH). --chrome PATH forces one.
+Browser (first that works): --chrome PATH / $CHROME_PATH -> Playwright's bundled Chromium (or
+headless shell) for the installed playwright version -> any other Chromium revision already in the
+Playwright cache ($PLAYWRIGHT_BROWSERS_PATH, ~/.cache/ms-playwright, ~/Library/Caches/ms-playwright,
+%LOCALAPPDATA%/ms-playwright) -> a system Chrome/Chromium/Edge -> if none exists, it runs
+`python -m playwright install chromium` once and uses the bundled Chromium (disable with
+--no-install). So no system Chrome is needed.
 
 Tall sections (long tables, big trees, reference lists) are also captured as viewport-sized
 slices (`03_works_p1.png`, `_p2` …) so the text stays readable; --max-slices caps the count.
+Scrollable tables (the works table has its own scroll box) are additionally scrolled inside the
+container and captured as `NN_works_table_s2.png`, `_s3` … (--table-slices, default 3; 0 = off).
 
   pip install playwright && python -m playwright install chromium   # optional if Chrome is installed
   python scripts/screenshot.py out/survey.html --outdir out/screens
@@ -23,6 +28,7 @@ import asyncio
 import glob
 import os
 import shutil
+import subprocess
 import sys
 
 from playwright.async_api import async_playwright
@@ -38,35 +44,87 @@ CHROME_CANDIDATES = [
 ]
 
 
+def playwright_cached():
+    """Chromium / headless-shell executables already downloaded by Playwright (any revision, newest first)."""
+    roots = [os.environ.get("PLAYWRIGHT_BROWSERS_PATH"), os.path.expanduser("~/.cache/ms-playwright"),
+             os.path.expanduser("~/Library/Caches/ms-playwright"),
+             os.path.join(os.environ.get("LOCALAPPDATA", ""), "ms-playwright") if os.environ.get("LOCALAPPDATA") else None]
+    rels = ["chrome-linux/chrome", "chrome-linux64/chrome", "chrome-mac/Chromium.app/Contents/MacOS/Chromium",
+            "chrome-mac-arm64/Chromium.app/Contents/MacOS/Chromium", "chrome-win/chrome.exe", "chrome-win64/chrome.exe",
+            "chrome-headless-shell-linux64/chrome-headless-shell", "chrome-linux/headless_shell",
+            "chrome-headless-shell-mac-arm64/chrome-headless-shell", "chrome-headless-shell-mac-x64/chrome-headless-shell",
+            "chrome-headless-shell-win64/chrome-headless-shell.exe"]
+    hits = []
+    for root in filter(None, roots):
+        if root == "0" or not os.path.isdir(root):
+            continue
+        for d in glob.glob(os.path.join(root, "chromium*-*")):
+            for r in rels:
+                f = os.path.join(d, r)
+                if os.path.isfile(f) and os.access(f, os.X_OK):
+                    rev = int("".join(ch for ch in d.rsplit("-", 1)[-1] if ch.isdigit()) or 0)
+                    hits.append((rev, "headless" not in r, f))
+    return [f for _, _, f in sorted(hits, reverse=True)]
+
+
 def find_chrome():
     """First system Chrome/Chromium/Edge found (PATH names, app bundles, Windows paths, snap)."""
     for c in CHROME_CANDIDATES:
         p = shutil.which(c) if os.sep not in c and "\\" not in c else (c if os.path.exists(c) else None)
         if p:
             return p
-    for pat in ("/snap/bin/chromium", os.path.expanduser("~/.cache/ms-playwright/chromium-*/chrome-linux/chrome")):
+    for pat in ("/snap/bin/chromium",):
         hits = sorted(glob.glob(pat))
         if hits:
             return hits[-1]
     return None
 
 
-async def launch(p, chrome):
+def install_bundled():
+    """Download Playwright's Chromium for the installed playwright version (one-time, ~150 MB)."""
+    print("no browser found -> running `python -m playwright install chromium` (one-time download; --no-install to skip)")
+    try:
+        r = subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], timeout=900)
+        return r.returncode == 0
+    except (OSError, subprocess.SubprocessError) as e:
+        print(f"playwright install failed: {e}")
+        return False
+
+
+async def launch(p, chrome, allow_install=True):
     kw = {"args": ["--no-sandbox"]}
     if chrome:
         print(f"browser: {chrome}")
         return await p.chromium.launch(executable_path=chrome, **kw)
+    first_err = ""
     try:
         b = await p.chromium.launch(**kw)
         print("browser: Playwright bundled Chromium")
         return b
-    except Exception as e:  # bundled browser not installed (or wrong revision)
-        sys_chrome = find_chrome()
-        if not sys_chrome:
-            raise SystemExit("No browser: run `python -m playwright install chromium` or pass --chrome PATH "
-                             f"(bundled launch failed: {str(e).splitlines()[0]})")
+    except Exception as e:  # bundled browser not installed (or another revision)
+        first_err = str(e).splitlines()[0] if str(e) else type(e).__name__
+    for exe in playwright_cached():
+        try:
+            b = await p.chromium.launch(executable_path=exe, **kw)
+            print(f"browser: Playwright-cached Chromium (other revision) {exe}")
+            return b
+        except Exception:
+            continue
+    sys_chrome = find_chrome()
+    if sys_chrome:
         print(f"browser: bundled Chromium unavailable -> system browser {sys_chrome}")
         return await p.chromium.launch(executable_path=sys_chrome, **kw)
+    if allow_install and install_bundled():
+        b = await p.chromium.launch(**kw)
+        print("browser: Playwright bundled Chromium (just installed)")
+        return b
+    raise SystemExit("No browser: run `python -m playwright install chromium` or pass --chrome PATH "
+                     f"(bundled launch failed: {first_err})")
+
+
+COUNT_WRAP_JS = "sid => document.querySelectorAll(\"#\" + sid + \" .tbl-wrap\").length"
+TABLE_DIMS_JS = "el => ({sh: el.scrollHeight, ch: el.clientHeight, vis: el.offsetParent !== null})"
+SET_SCROLL_JS = "(el, y) => { el.scrollTop = y; }"
 
 
 async def main(a):
@@ -74,7 +132,7 @@ async def main(a):
     url = "file://" + os.path.abspath(a.html)
     problems = []
     async with async_playwright() as p:
-        b = await launch(p, a.chrome)
+        b = await launch(p, a.chrome, not a.no_install)
         pg = await b.new_page(viewport={"width": a.width, "height": a.height}, device_scale_factor=a.scale)
         logs = []
         pg.on("console", lambda m: logs.append(f"{m.type}: {m.text}") if m.type in ("error", "warning") else None)
@@ -121,6 +179,26 @@ async def main(a):
                         shots.append(fs)
                         y += a.height
                         k += 1
+                # scrollable tables (e.g. the works table, max-height 680px): the section shot only shows the
+                # first screen of rows, so scroll inside the container and capture a few more slices
+                n_wrap = await pg.evaluate(COUNT_WRAP_JS, sid)
+                for t in range(n_wrap if a.table_slices > 0 else 0):
+                    loc = pg.locator("#" + sid + " .tbl-wrap").nth(t)
+                    dims = await loc.evaluate(TABLE_DIMS_JS)
+                    if not dims["vis"] or dims["sh"] <= dims["ch"] + 10:
+                        continue
+                    step = max(int(dims["ch"] * 0.9), 50)
+                    j, top = 1, step
+                    while top < dims["sh"] - 10 and j <= a.table_slices:
+                        await loc.evaluate(SET_SCROLL_JS, top)
+                        await pg.wait_for_timeout(250)
+                        suffix = str(t + 1) if n_wrap > 1 else ""
+                        fs = os.path.join(a.outdir, f"{i:02d}_{sid}_table{suffix}_s{j + 1}.png")
+                        await loc.screenshot(path=fs)
+                        shots.append(fs)
+                        top += step
+                        j += 1
+                    await loc.evaluate(SET_SCROLL_JS, 0)
             if await pg.evaluate("typeof showCountry==='function' && document.getElementById('map') && !document.getElementById('map').classList.contains('hidden')"):
                 await pg.evaluate("showCountry(Object.keys(DATA.cntTeam)[1]||Object.keys(DATA.cntTeam)[0])")
                 await pg.wait_for_timeout(400)
@@ -147,6 +225,9 @@ if __name__ == "__main__":
     ap.add_argument("--height", type=int, default=1000)
     ap.add_argument("--scale", type=float, default=1)
     ap.add_argument("--max-slices", type=int, default=6, help="max viewport slices per tall section (0 = none)")
+    ap.add_argument("--table-slices", type=int, default=3,
+                    help="extra slices per scrollable table (scrolled inside the container; 0 = none)")
     ap.add_argument("--chrome", default=os.environ.get("CHROME_PATH"),
-                    help="Chrome/Chromium executable (default: bundled Chromium, else auto-detected system Chrome)")
+                    help="Chrome/Chromium executable (default: bundled Chromium, else cached/system Chrome, else auto-install)")
+    ap.add_argument("--no-install", action="store_true", help="never run `playwright install chromium` automatically")
     sys.exit(asyncio.run(main(ap.parse_args())))

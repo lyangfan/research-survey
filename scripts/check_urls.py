@@ -5,7 +5,10 @@
 For each URL: HEAD with a timeout (redirects followed); if the server rejects HEAD
 (400/403/405/501…) or HEAD fails, retry once with a small GET. Classifies the result as
   ok        2xx/3xx after redirects
-  blocked   401/403/429 or a bot wall — page probably exists but refuses scripts (check by hand)
+  blocked   401/403/429 or a bot wall — page probably exists but refuses scripts (check by hand);
+            also redirect loops (e.g. Genome Research / other publishers' cookie-based implicit-login
+            302 loops): the checker retries once with a cookie jar, and if it still loops the URL is
+            "blocked" (works in a browser), not "dead"
   dead      404/410, other 4xx/5xx, DNS failure, connection refused, timeout
 and prints a table; exit code 1 when any URL is dead (use --no-fail to always exit 0).
 
@@ -18,6 +21,7 @@ timeline[].url, meta.extra_refs[].url, teams[].url, and repos (https://github.co
   python check_urls.py urls.txt --out url_report.tsv --timeout 15
 """
 import argparse
+import http.cookiejar
 import json
 import os
 import socket
@@ -31,14 +35,19 @@ UA = "Mozilla/5.0 (compatible; research-survey-html link checker; +https://githu
 BLOCKED = {401, 403, 429, 999}
 
 
-def _req(url, method, timeout):
+def _req(url, method, timeout, opener=None):
     req = urllib.request.Request(url, method=method, headers={"User-Agent": UA, "Accept": "*/*",
                                                               **({"Range": "bytes=0-2047"} if method == "GET" else {})})
     t0 = time.time()
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with (opener.open(req, timeout=timeout) if opener else urllib.request.urlopen(req, timeout=timeout)) as r:
         if method == "GET":
             r.read(2048)
         return r.status, r.geturl(), time.time() - t0
+
+
+def _is_loop(e):
+    """urllib signals a redirect loop / too many redirects as an HTTPError with a 3xx code."""
+    return 300 <= e.code < 400 or "redirect" in str(getattr(e, "msg", "") or e).lower()
 
 
 def check(url, timeout=12):
@@ -46,14 +55,31 @@ def check(url, timeout=12):
     if not url or not url.startswith(("http://", "https://")):
         res.update(error="not an http(s) URL")
         return res
+    opener = None
     for method in ("HEAD", "GET"):
         try:
-            code, final, dt = _req(url, method, timeout)
+            code, final, dt = _req(url, method, timeout, opener)
             res.update(status=code, final_url=final if final != url else "", ms=int(dt * 1000), error="")
             res["state"] = "ok" if code < 400 else ("blocked" if code in BLOCKED else "dead")
+            if opener is not None:
+                res["error"] = "ok only with cookies (redirect loop without them)"
             return res
         except urllib.error.HTTPError as e:
             res.update(status=e.code, error=f"HTTP {e.code}")
+            if _is_loop(e):
+                res.update(state="blocked", error=f"redirect loop (HTTP {e.code}; cookie/JS login wall — opens in a browser)")
+                if opener is None:
+                    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+                    if method == "HEAD":
+                        continue
+                    try:
+                        code, final, dt = _req(url, "GET", timeout, opener)
+                        res.update(status=code, final_url=final if final != url else "", ms=int(dt * 1000),
+                                   state="ok" if code < 400 else ("blocked" if code in BLOCKED else "dead"),
+                                   error="ok only with cookies (redirect loop without them)")
+                    except (urllib.error.URLError, OSError):
+                        pass
+                return res
             if method == "HEAD" and e.code not in (404, 410):
                 continue  # many servers reject HEAD; try GET
             res["state"] = "blocked" if e.code in BLOCKED else "dead"
@@ -63,6 +89,9 @@ def check(url, timeout=12):
             res.update(status=None, error=f"{type(reason).__name__}: {reason}"[:160])
             if method == "HEAD":
                 continue
+            if opener is not None:
+                res["state"] = "blocked"  # loop seen earlier; cookie retry failed on the network
+            return res
     return res
 
 

@@ -4,7 +4,11 @@
 
 > **时间范围规则**：本技能**没有默认时间范围**。只有用户明确要求时，才把时间范围作为约束加到检索（下文各数据源的日期参数/语法）和筛选中；用户没提就不加任何日期过滤，也不按年份排除条目。下文出现的日期参数与日期语法都只是“用户指定了时间范围时”的写法示例。报告“范围与方法”写明用户指定的范围，或“未设时间限制”。
 
-> **检索日志**：开始前 `export SURVEY_QUERY_LOG=search_log.tsv`（或给脚本传 `--log`）。`search_pubmed.py`、`search_europepmc.py`、`search_s2.py search|bulk`、`search_openalex.py search` 会把每条检索式**逐字**、总命中数、取回条数、时间（带 UTC 偏移）和输出文件追加到该 TSV，保证“范围与方法”里的检索可复现。
+> **检索日志**：开始前 `export SURVEY_QUERY_LOG=search_log.tsv`（或给脚本传 `--log`）。所有检索型调用（PubMed、Europe PMC search、S2 search/bulk、OpenAlex search 及其 Crossref 回退、arXiv `--query`、Crossref `title`、bioRxiv `window`、`snowball.py`、`recall_check.py` 的 recall/saturation/coverage）会把检索式**逐字**、总命中数、取回条数、时间（带 UTC 偏移）和输出文件追加到该 TSV，保证“范围与方法”里的检索可复现，不用手工补录。
+
+> **核验日志**：按 DOI/ID 的逐条核验（Europe PMC / Crossref / bioRxiv / OpenAlex 的 `doi` 模式、arXiv `--ids/--titles`、`recall_check.py verify`）写进单独的 `verify_lookups.tsv`（`$SURVEY_LOOKUP_LOG` 或 `--lookup-log`；默认放在检索日志旁边），不混进检索日志。
+
+> **不能只靠关键词检索**：按 §1b 的多策略流程做（必收清单 → 名称检索 → 关键词检索 → 滚雪球 → 门户/仓库挖掘 → 召回与饱和），每条候选记 `found_via`，报告写明关键词检索的召回率。
 
 > 适用的 API 限制与行为在 2026 年会变化（例如 OpenAlex 自 2026-02 起要求 API key）。遇到与本文不一致的情况，以官方文档为准，并在报告“范围与方法”中写明实际做法。
 
@@ -49,7 +53,72 @@
 | Europe PMC | `TITLE:` `ABSTRACT:` `AUTH:` `AFF:`、`SRC:PPR`（预印本）/`SRC:MED`、短语双引号；（仅用户指定时间范围时）`FIRST_PDATE:[2024-01-01 TO 2026-10-01]` | `(FarmGTEx OR PigGTEx) AND SRC:PPR` |
 | Crossref | `query.bibliographic=` 适合按标题核对，不适合主题检索 | — |
 
-4. **迭代**：首轮结果按引用数和相关性浏览前 50–100 条 → 把新出现的术语加入同义词表 → 再检索，直到新增相关条目明显减少（饱和）。把每轮的检索式、日期、命中数记入 `search_log.md`（写进报告的“范围与方法”）。
+4. **迭代**：首轮结果按引用数和相关性浏览前 50–100 条 → 把新出现的术语加入同义词表 → 再检索，直到新增相关条目明显减少（饱和，用 `recall_check.py saturation` 按方向判断，见 §1b）。检索式、日期、命中数自动记入 `search_log.tsv`，整理成 `search_log.md` 写进报告的“范围与方法”。
+5. **总称不够用**：领域总称（“post-GWAS”“AI for science”）只能找到综述和自称属于该领域的新论文。每个方向一定要再按**具名方法/工具/数据集**检索（§1b）。
+
+---
+
+## 1b. 多策略检索流程（必做，不能只靠关键词检索）
+
+**为什么**：关键词检索按相关性只取回前几百条，而经典方法论文的标题和摘要很少使用领域的总称：精细定位论文写 “Bayesian variable selection”，不写 “post-GWAS”；共定位论文写 “colocalisation”，不写 “functional follow-up”。结果是**里程碑工作恰恰最容易漏掉**。所以本技能把检索拆成 6 个必做环节，每个环节的产出都带 `found_via`，最后用必收清单量化召回率并写进报告。
+
+| 环节 | 做什么 | 工具 | `found_via` |
+|---|---|---|---|
+| ① 必收清单 | **检索之前**凭领域知识写出每个方向的奠基/里程碑工作，逐条到数据库核实 | `recall_check.py verify` | `must` |
+| ② 拆方向 + 具名检索 | 每个方向列出具名方法/工具/数据集/联盟/资源，逐个按名称检索 | 各 `search_*.py`，文件名 `name_*.jsonl` | `name` |
+| ③ 关键词检索 | §1 的概念块检索式（总称 + 同义词） | 各 `search_*.py` | `kw:<source>` |
+| ④ 滚雪球 | 综述/里程碑做种子：后向（参考文献）+ 前向（被引） | `snowball.py refs/cites` | `snowball:refs` / `snowball:cites` |
+| ⑤ 门户/文档/仓库挖掘 | 联盟/门户的 Publications 页、工具文档 “How to cite”、GitHub README Citation 段 / `CITATION.cff` / R `inst/CITATION` | `snowball.py page-ids/repo-cites` | `page:<host>` / `repo-cite:<owner/repo>` |
+| ⑥ 召回与饱和 | 各策略对必收清单的召回率（总体/分方向/累计）；每个方向是否饱和；成稿后的各方向来源构成 | `recall_check.py recall/saturation/coverage` | — |
+| 手工补充 | 上述都没找到、但经核实确属必收的 | `search_crossref.py doi` 核实 | `manual` |
+
+### 步骤
+1. **拆方向，列具名实体**：先按 `taxonomy-and-teams.md` 拆出 6–12 个方向，每个方向写 5–20 个**具名**的方法/工具/软件包、数据集/队列、联盟/项目、数据库/门户、关键实验技术。这一步与方向分类同时做，后面会迭代。
+2. **写必收清单（检索之前，独立于检索结果）**：`must_include.tsv`，列 `name / doi / title / dir / note`，每个方向 5–15 篇（奠基方法、里程碑资源、权威综述、最新代表作）。DOI 记不清就只写标题。然后：
+   ```bash
+   python scripts/recall_check.py verify must_include.tsv --out must_verified.tsv --jsonl cand_must.jsonl
+   ```
+   逐条查 Crossref（404 时查 Europe PMC）：`ok` / `resolved_by_title`（只有标题的解析出 DOI）/ `title_mismatch`（DOI 指向了别的论文）/ `doi_not_found` / `not_found`。后三种必须改正或删除：**记忆中的 DOI 常常是错的**（post-GWAS 的 148 条里有 4 条 DOI 错误），未核实的条目不能进入 works.json。核实通过的记录写进 `cand_must.jsonl`（`found_via: ["must"]`），之后参与合并。
+3. **具名检索**：对第 1 步的每个实体单独检索，例如 `TITLE:"LD score regression"`（Europe PMC）、`SuSiE[tiab] AND fine-mapping[tiab]`（PubMed）、`coloc Bayesian colocalization`（S2/OpenAlex/Crossref 回退）、`"GTEx Consortium"[cn]`。每条用 `--sort "CITED desc"` 或相关性排序取前 20–50 条即可；输出命名 `name_<dir>_<n>.jsonl`。
+4. **关键词检索**：照 §1 和 §2 做，输出 `pm_*.jsonl`、`ep_*.jsonl` 等。
+5. **滚雪球**（§3）：后向以 3–10 篇权威综述 + 各方向里程碑为种子；前向以各方向的奠基方法为种子（`--min-seeds 2` 降噪）。
+6. **门户/文档/仓库挖掘**：
+   ```bash
+   python scripts/snowball.py page-ids https://<consortium>/publications https://<tool-docs>/citation --out sb_page.jsonl
+   python scripts/snowball.py repo-cites @data/repos.json --out sb_repo.jsonl      # 或 owner/repo …
+   ```
+   JS 渲染的页面（脚本只拿到空壳）用浏览器/WebFetch 打开，把找到的 DOI 写成一行一个的清单，再用 `recall_check.py verify` 或 `search_crossref.py doi` 核实。
+7. **合并**：`merge_dedup.py cand_must.jsonl name_*.jsonl pm_*.jsonl ep_*.jsonl sb_*.jsonl --found-via 'name_*=name' --out candidates.jsonl --csv screening.csv`。同一工作被多个策略找到时 `found_via` 取并集；CSV 和 works 草稿都带 `found_via` 列。手工补的条目写 `found_via: ["manual"]`。
+8. **召回率**：
+   ```bash
+   python scripts/recall_check.py recall --must must_verified.tsv \
+       --pool keyword='pm_*.jsonl,ep_*.jsonl,s2_*.jsonl' --pool names='name_*.jsonl' \
+       --pool snowball='sb_refs*.jsonl,sb_cites*.jsonl' --pool mining='sb_repo*.jsonl,sb_page*.jsonl' --out recall.tsv
+   ```
+   输出 Markdown 表（各策略召回、累计召回、各方向 `命中/总数`）和**所有策略都漏掉的清单**，同时写进检索日志（source `recall-check`）。对漏掉的条目：先按名称再检索、以它为种子再滚一轮，仍找不到才手工补（`manual`）。**关键词检索的召回率**（第一行）必须写进报告。
+9. **饱和**：每轮（关键词 / 名称 / 后向 / 前向 / 挖掘）筛选后，
+   ```bash
+   python scripts/recall_check.py saturation --round r1-keyword='pm_*.jsonl,ep_*.jsonl' \
+       --round 'r2-names@PLEIO;MR=name_pleio_*.jsonl,name_mr_*.jsonl' --round r3-refs='sb_refs*.jsonl' \
+       --relevant screening.csv
+   ```
+   `@DIR` 标出该轮针对的方向（不标 = 针对全部）。一个方向**饱和** = 至少 2 轮针对它、已找到 ≥5 篇相关工作、且最后一轮新增相关工作 <5%。未饱和的方向继续做名称检索或以最新相关工作为种子滚雪球。时间不够可以停，但要在报告里写明哪些方向未饱和。
+10. **来源构成**：成稿后 `python scripts/recall_check.py coverage <data_dir> --kw-pool 'pm_*.jsonl,ep_*.jsonl'`，输出各方向“作品数 / 各策略贡献数 / 仅靠关键词能找到的比例”的表，贴进 `narrative/scope.html`。
+
+### 实例：post-GWAS（2026-10 测试运行）
+- 主题“GWAS 之后：从关联信号到因果变异、基因与机制”，12 个方向（FM 精细定位、COLOC 共定位、TWAS、ANNO 功能注释、V2G 变异到基因、MR、QTL、DL 深度学习变异效应、EXP 实验验证、PRS、PLEIO 多效性、LIV 畜禽）。
+- 当时只做了关键词检索（PubMed 14 条、Europe PMC 6 条、S2/OpenAlex/arXiv 各 1–2 条检索式，合并后 4,487 条），然后凭领域知识列了 148 个 DOI，逐条用 Crossref + Europe PMC 核实。**关键词池只覆盖其中 52 篇（35%）**，其余靠手工整理，没有做滚雪球。事后用本流程复盘（同一份 148 条清单，其中 4 条 DOI 有误、未通过核实）：
+
+| 策略（累计） | 新增命中 | 累计召回 | 说明 |
+|---|---|---|---|
+| 关键词检索 | 52 | 35% | PLEIO 0/10、ANNO 1/14、MR 1/11、V2G 2/10，最差 |
+| + 名称检索（只做了 PLEIO 方向，7 条） | 5 | 39% | PLEIO 0/10 → 5/10（LDSC、MTAG、Genomic SEM、LAVA、PheWAS） |
+| + 后向滚雪球（3 篇综述：Schaid 2018 NRG、Gallagher 2018 AJHG、NRG 2025 精细定位综述） | 23 | 54% | FM 15/15，ANNO 1→9/14 |
+| + 前向滚雪球（SuSiE、coloc、FINEMAP，各取 300 篇） | 0 | 54% | 前向主要带来新工作，对经典清单贡献小 |
+| + 仓库 “cite us”（`repo-cites @repos.json`，53 个仓库） | 10 | 61% | MR 1→3/11、TWAS、COLOC |
+| 最终 works.json（180 篇）中仅靠关键词能找到的 | — | 48% | ANNO 7%、MR 9%、PLEIO 9%、V2G 20%；FM 86%、LIV 80% |
+
+- 结论：经典方法类方向（ANNO、MR、PLEIO、V2G）几乎完全依赖名称检索和滚雪球；专有名词明确的方向（FM、畜禽 FarmGTEx 系列）关键词检索就够。每个方向再做 5–10 条名称检索、各用 1–2 篇该方向综述做后向滚雪球，手工补充的部分就会缩小到个位数，而且每一篇都有可追溯的来源。
 
 ---
 
@@ -66,6 +135,7 @@
   2. 仍然 429：停止 arXiv API，改用 **Semantic Scholar batch**（`ids:["ARXIV:2408.06292",…]`）或 **OpenAlex**（arXiv 论文也有收录）补元数据；或直接打开 `https://arxiv.org/abs/<id>` 页面人工核对。
   3. 大批量（上万条）元数据：用 OAI-PMH 或 Kaggle 上的 arXiv metadata 快照，而不是反复调用搜索 API。
 - 脚本：`python scripts/search_arxiv.py --query '…' --max 200 --out cand_arxiv.jsonl`；用户指定了时间范围时再加 `--from 2024-01-01 --to 2026-10-01`；核对标题列表 `--titles titles.txt`。
+- 日志：`--query` 写检索日志（含总命中数），`--ids/--titles` 写核验日志；持续 429/503 时保存已取到的记录并以退出码 2 结束。
 - 看 `journal_ref` 和 `comment` 字段：作者常在其中写 “Accepted to ICLR 2025”，但这只是线索，需到会议官网/OpenReview 核实。
 
 ### 2.2 Semantic Scholar Graph API（跨学科、引用网络、滚雪球）
@@ -85,6 +155,7 @@
 - 优势：`authorships[].institutions` 和 `countries` 字段可直接辅助“机构/国家”判定（仍需人工复核）。
 - 脚本：`OPENALEX_API_KEY=… python scripts/search_openalex.py search "…"`（用户指定时间范围时加 `--from … --to …`）
 - 脚本不会挂起：429 “Insufficient budget” 立即停止；其他 429/5xx 最多重试 `--retries` 次（`Retry-After` 封顶 60 秒），整体超过 `--timeout`（默认 300 秒）就停，保存已取到的结果并以退出码 2 结束。
+- **无 key / 额度耗尽时的免 key 回退**（默认 `--fallback crossref`）：同一检索式改用 Crossref `query=`（按相关性排序、cursor 翻页），记录带 `fallback_for: "openalex"`，检索日志记为 `crossref-fallback`；`doi` 模式回退到 Crossref 单条查询。拿到记录则退出码 0，一条都没有才是 2；`--fallback none` 保持旧行为。设 `SURVEY_MAILTO` 进入 polite pool。Crossref 没有机构/国家字段，回退结果用 Europe PMC/PubMed 补单位。
 
 ### 2.4 Crossref（DOI 核对、期刊/会议信息、预印本↔正式版关系）
 - 单条：`GET https://api.crossref.org/works/{DOI}`；按标题核对：`GET https://api.crossref.org/works?query.bibliographic=<title>&rows=3`
@@ -92,12 +163,14 @@
 - `relation` 字段中的 `is-preprint-of` / `has-preprint` 可以把预印本与正式发表版本连起来。
 - 脚本的 `date` 是首次公开日期（`published-online`，预印本为 `posted`），同时给出 `date_online` 与 `date_print`；用它修正来源只有纸质刊期的条目。
 - 脚本：`python scripts/search_crossref.py doi 10.1038/…` / `title "…"`
+- 一次可查多个 DOI，404 记为 `not_found` 不中断；输出另有 `is_preprint`、`server`、`is_preprint_of`（预印本 → 正式版 DOI）、`has_preprint`（正式版 → 预印本 DOI）、`published`，`merge_dedup.py` 用它们合并预印本与正式版。`doi` 写核验日志，`title` 写检索日志（含总命中数）；网络失败时保存已取到的记录并以退出码 2 结束。
 
 ### 2.5 bioRxiv / medRxiv（生命科学与医学预印本）
 - **DOI 前缀**：2025-11 及以前为 `10.1101/YYYY.MM.DD.NNNNNN`（更早为 `10.1101/NNNNNN`），**2025-12-01 起为 openRxiv 前缀 `10.64898/YYYY.MM.DD.NNNNNN`**（medRxiv 后缀可为 8 位）。注意 `10.1101/` 也被 CSHL 期刊使用（Genome Research `10.1101/gr.…`、Genes & Dev `10.1101/gad.…`），这些不是预印本。脚本（`common.is_preprint_doi`）按此识别预印本。
 - **按关键词找预印本请用 Europe PMC**：`search_europepmc.py search '…' --preprints`；再用本脚本的 `doi` 模式补版本、`corresponding_institution`（推断国家很有用）和 `published`（正式版 DOI，`merge_dedup.py` 据此合并）。
 - **没有关键词搜索接口**。`https://api.biorxiv.org/details/biorxiv/2025-01-01/2025-01-31/0?category=bioinformatics` 按日期窗口（可选学科分类）分页返回全部预印本，需本地按关键词过滤。
 - 单条：`/details/biorxiv/{DOI}`；是否已正式发表：`/pubs/biorxiv/{DOI}`（返回 `published_doi`、`published_journal`）。medRxiv 把 `biorxiv` 换成 `medrxiv`。
+- **版本与日期**：API 对每个版本返回一行；`doi` 模式合成一条：`date` = **v1 首发日**（首次公开日期，works.json 用它），`date_latest`/`url_latest` 是最新版，另有 `version`、`versions[]`（每版日期）、`url`（指向 v1）、`server`、`published`/`published_date`。一次可查多个 DOI，写核验日志。窗口模式里只看到 v2+ 的记录带 `date_note`，提醒去查 v1。
 - 日期窗口是这个 API 的取数方式，不是时间限制：用户没指定时间范围时，窗口取**整个存档**（bioRxiv 2013-11-01 / medRxiv 2019-06-01 至今，脚本不传 `--from/--to` 时自动如此），用 `--category` 缩小扫描量；用户指定了时间范围时才用该范围作窗口。
 - 窗口太大时按月切片（或调大 `--max-pages`；脚本在页数上限截断时会提示未扫完）；关键词检索也可以先在 bioRxiv 网站搜索框人工检索，再用 API 补元数据。
 - 脚本：`python scripts/search_biorxiv.py doi 10.64898/2026.08.30.748055`（`doi.org` 链接也可；在 bioRxiv 找不到时自动试 medRxiv）；`python scripts/search_biorxiv.py window --category … --kw "language model" --kw agent [--from … --to …]`（仅适合有时间范围或小类别的扫描）
@@ -114,6 +187,8 @@
 - 覆盖 MEDLINE、PMC 全文和预印本（`SRC:PPR`：bioRxiv、medRxiv、Research Square、Preprints.org 等），返回作者单位、被引数、MeSH。
 - 脚本：`python scripts/search_europepmc.py search '(FarmGTEx OR PigGTEx)' --max 500 --out ep.jsonl`；`--preprints` 只要预印本；`--count-only` 只看 hitCount；`--sort "CITED desc"` 按被引；`doi` 子命令查单条。输出字段与其他脚本一致，另有 `epmc_src`、`is_preprint`、`affiliation`、`country_guess`、`citations`。
 - `date` 取电子出版日期 > `firstPublicationDate` > 纸质日期；`firstPublicationDate` 有时就是纸质刊期，关键条目用 Crossref 核对。
+- `--sort` 只接受 `CITED`、`P_PDATE_D`、`FIRST_PDATE_D`、`FIRST_IDATE_D`、`PUB_YEAR`、`AUTH_FIRST` + `asc|desc`（`CITED%20desc` 这类已编码写法会自动解码）；未知字段直接报错（服务器对它只回 503）。服务器 5xx/网络失败时保存已取到的记录、打印替代方案并以退出码 2 结束。`doi` 子命令可查多个 DOI，写核验日志。
+- `is_preprint` 只在 `SRC:PPR` 且没有期刊 DOI 时为真；预印本↔正式版链接：预印本的 “Preprint of” → `published_pmid`/`published`，正式版的 “Preprint in” → `preprint_epmc_ids`。
 
 ### 2.7 DBLP（**计算机科学**会议/期刊的“是否正式发表”权威来源；其他学科不用）
 - `https://dblp.org/search/publ/api?q=<title words>&format=json&h=10`；作者页、会议目录页（如 `https://dblp.org/db/conf/iclr/iclr2025.html`）。
@@ -142,21 +217,38 @@
 
 ## 3. 滚雪球检索（Snowballing）
 
-1. 选 5–15 篇**种子论文**：高引综述 + 每个子方向 1–2 篇奠基/代表作。
-2. **后向**（references）：`search_s2.py refs ARXIV:<id>` —— 找被种子引用的早期工作。
-3. **前向**（citations）：`search_s2.py cites ARXIV:<id> --max 1000` —— 找引用种子的新工作（新进展主要来自这里）。
-4. 合并后按“标题关键词命中 + 引用数”初筛（用户指定了时间范围时再按发表时间排除范围外条目），再人工读摘要。
-5. 每轮新增相关条目 < 5% 时停止。
+```bash
+# 后向：种子引用了谁（找经典/早期工作）。默认 auto = 第一个有结果的来源：
+#   Europe PMC（免 key，按 PMID）→ Crossref（免 key，出版社登记的参考文献）→ S2 → OpenAlex
+python scripts/snowball.py refs 10.1038/s41576-018-0016-z 10.1016/j.ajhg.2018.04.002 --out sb_refs.jsonl
+python scripts/snowball.py refs @must_verified.tsv --via all --out sb_refs_all.jsonl   # 合并所有来源，召回最高
+# 前向：谁引用了种子（找新工作）：Europe PMC（免 key）→ S2 → OpenAlex
+python scripts/snowball.py cites 10.1111/rssb.12388 10.1371/journal.pgen.1004383 --max 300 --min-seeds 2 --out sb_cites.jsonl
+```
+1. **种子**：3–10 篇权威综述（后向最有效）+ 每个方向 1–2 篇奠基方法（前向）。种子可以写在文件里（`@seeds.txt`，一行一个；带 `doi` 列的 TSV/CSV，如必收清单，也可以）。支持 DOI、`PMID:…`、PMCID、`arXiv:…`。
+2. 输出是标准候选 JSONL（只有 PMID/DOI 的记录会批量用 Europe PMC/Crossref 补全元数据，`--no-enrich` 跳过），另有 `found_via`、`seeds`（由哪些种子带出）、`seed_count`。按 `seed_count`（被多个种子共同引用 = 强信号）再按被引数排序；前向结果很杂时用 `--min-seeds 2`。
+3. 每个种子 × 方向 × 来源都写进检索日志（source `snowball-refs:europepmc` 等）。
+4. **免 key 优先**：Europe PMC 的 references/citations 接口只覆盖有 PMID 的条目；Crossref 的参考文献取决于出版社是否登记（部分出版社不登记）；S2 建议设 `S2_API_KEY`；OpenAlex 需要 `OPENALEX_API_KEY`。`--via all` 把能用的来源都跑一遍取并集；`--via crossref,s2` 自定回退顺序。`search_s2.py refs|cites` 仍可用于 S2 专用场景。
+5. Europe PMC 的被引列表不按被引数排序（偏新），`--max` 截断时前向结果偏向近期工作——正好用来找新进展；找经典工作靠后向。
+6. 合并后照常筛选。每轮新增相关条目 <5% 时停止（`recall_check.py saturation`，见 §1b）。
 
 ## 4. 合并、去重与筛选（Dedup & screening）
 
 ```bash
-python scripts/merge_dedup.py cand_*.jsonl --out candidates.jsonl --csv screening.csv
-# 在 screening.csv 中填 include=1 与 dirs=KEY;KEY（可用 Excel/WPS 打开，UTF-8 BOM）
+python scripts/merge_dedup.py cand_must.jsonl name_*.jsonl pm_*.jsonl ep_*.jsonl sb_*.jsonl \
+    --found-via 'name_*=name' --out candidates.jsonl --csv screening.csv [--link-online]
+# 在 screening.csv 中填 include=1 与 dirs=KEY;KEY（第一个为主方向；可用 Excel/WPS 打开，UTF-8 BOM）
 python scripts/merge_dedup.py candidates.jsonl --screened screening.csv --works-draft works_draft.json
 ```
-- 去重键优先级：**DOI（非 arXiv DOI）> arXiv ID > 规范化标题**；同一工作的预印本与正式版合并为一条，保留两个标识符（`doi` 与 `arxiv`）。
-- bioRxiv/medRxiv 预印本带 `published`（正式版 DOI，来自 `search_biorxiv.py doi`）时自动并入正式版：`doi`/`url` 用正式版，预印本 DOI 存进 `preprint_doi`（works.json 也用这个字段，报告里显示“[预印本]”链接），`date` 取最早日期。
+- 去重键优先级：**DOI（非 arXiv DOI）> arXiv ID > 规范化标题**；同 DOI 的记录字段合并，同标题、同类（都是正式版或都是预印本）的也合并。
+- **预印本还是正式版只看真实标识符**：DOI 前缀属于预印本服务器（`common.PREPRINT_DOI_PREFIXES`：bioRxiv/medRxiv `10.1101/日期…` 与 `10.64898/`、Research Square、SSRN、Preprints.org、ChemRxiv、Authorea、Qeios、arXiv 等）才是预印本；其他 DOI 一律按正式版处理，即使某个索引标成预印本（如 S2 把已发表论文的 venue 写成 bioRxiv）。
+- **预印本 → 正式版合并**：预印本并入正式版记录，`doi`/`url` 用正式版；预印本的 DOI/URL/日期存 `preprint_doi`/`preprint_url`/`preprint_date`/`preprint_server`，多个预印本服务器的都列在 `preprint_dois`；`date` 取最早 = 首次公开日期；`link_method` 写明依据。依次尝试：
+  1. `published-doi`：预印本记录写了正式版 DOI（bioRxiv `published`、Crossref `is-preprint-of`、Europe PMC “Preprint of” 中的 DOI）；
+  2. `has-preprint`：正式版记录列出了预印本（Crossref）；
+  3. `europepmc`：Europe PMC 的 PMID/PPR 链接；
+  4. `fuzzy`：标题完全相同且前 5 位作者有重合，或第一作者相同、标题相似度 ≥ `--fuzzy`（默认 0.90）且正式版不早于预印本 60 天以上。0.75 以上但未合并的写进 CSV 的 `possible_published` 列，人工确认；
+  5. `--link-online`：仍未链接的预印本再查 Crossref 关系与 bioRxiv `/pubs` 接口。知道正式版 DOI 但候选里没有正式版记录时，生成一条正式版“存根”（venue 来自 API，需核实）。
+- **`found_via`**：每条候选记录被哪些策略找到（并集）。自带 `found_via` 的记录（`snowball.py`、`recall_check.py verify`）保留原值；其他记录按 `--found-via GLOB=LABEL`（按文件名匹配，如 `name_*=name`、`meta_*=manual`）打标，否则记为 `kw:<source>`。CSV 有 `found_via` 列（可手工改），works 草稿带 `found_via`，`build.py` 会打印汇总。
 - 标题自动清理（去 HTML 标签、去末尾句点）；CSV 带 `pmid`、`first_author`、`preprint_doi`、`featured` 列，`--csv-sort citations` 让高被引的排在前面。候选上千条时，可以读标题+摘要在 Python 里整理名单，但要写明纳入标准。
 - `10.48550/arXiv.xxxx` 是 arXiv 自己的 DOI，按 arXiv ID 处理。
 - 同名不同文（例如两个都叫 “AI-Researcher” 的仓库/论文）：靠作者与机构区分，不要只靠名字合并。
