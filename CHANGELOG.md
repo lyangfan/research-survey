@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-01 · v1.3 — works-table overlap fix, directions without code
+
+### Report
+- **Fixed: dates overlapping work titles in "代表性工作".** Cause: the works table used `table-layout: fixed` with a hard-coded 72 px date column (52 px of content after padding) and `white-space: nowrap`, while "2026-08-06" needs ~70 px in Noto Sans CJK and more in PingFang SC / Microsoft YaHei / DejaVu or with larger user fonts, so the date spilled into the title cell (2.7 px of slack with the reference font, −6.5 px = overlap with a wider one). The date column is now sized from the font's own digit width (`calc(9.5ch + 24px)`), the date can wrap at the hyphen as a last resort instead of overflowing, the other columns are proportional, and when the table container is ≤760 px wide every work becomes a card (date + status on top, then title, directions, institution, contribution) instead of squeezing the contribution column to one character.
+- Taxonomy tree is width-aware: margins come from measured label widths, leaf labels truncate with … (full name in the tooltip) and direction names wrap at narrow widths; re-laid out on resize.
+- **Directions without code repositories** (wet-lab / experimental): `meta.directions[]` gains `repo_expected: false` (alias `no_repo: true | "reason"`), `no_repo_reason` and `resources: [{name,url,kind,note}]` (datasets, protocols, data portals, biobanks; portals whose `dirs` include the direction are added automatically). The open-source section shows a short note + the resource list for them instead of empty entries; with no repos at all the section keeps only these notes (charts/table hidden); direction cards carry a "无代码仓库" badge.
+- `repos.json` entries may carry `dirs`: the open-source section then shows per-direction repo counts (click to filter the table) and tags rows with their directions.
+- `--check`: a direction with zero repos never warns; `repos.json` may be absent when every direction is `repo_expected: false`; errors for a non-boolean `repo_expected`, malformed `resources` or unknown repo `dirs`; warning when a repo is tagged with a no-repo direction or a resource has no URL.
+- Docs (SKILL.md, data-schema, repo-inspection, quality-checklist, taxonomy-and-teams, html-build-and-verify): don't force repositories for wet-lab/experimental directions; cover datasets, protocols, portals and biobanks instead; check the works table at desktop and ~800 px width.
+
 ## 2026-10-01 · v1.2 — fixes from a real test run (GTEx & FarmGTEx survey)
 
 A full run of the skill on a life-science topic ("GTEx 与 FarmGTEx", no time limit, 110 works) surfaced 27 issues. This release fixes most of them.

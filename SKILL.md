@@ -40,7 +40,8 @@ description: Use when the user asks for a comprehensive literature or field surv
 
 ## 3. 数据门户与开源仓库 → 详见 [references/repo-inspection.md](references/repo-inspection.md)
 - **数据门户/数据库/在线工具 ≠ 代码仓库**：写进 `portals.json`（名称、URL、类型、机构、覆盖范围、访问方式），用 `scripts/check_urls.py <data_dir> --only portals --write` 做存活检查（HEAD→GET、带超时；结果显示在报告里），也可 `check_urls.py <data_dir>` 检查全部链接。
-- 仓库：`scripts/github_repos.py <data_dir>/repos.json`：GitHub API 取 stars、forks、`license.spdx_id`、`pushed_at`、默认分支最近提交、latest release、archived（设 `GITHUB_TOKEN`；匿名 60 次/小时）；被限速时自动回退到公开页面 + Atom，并从原始 LICENSE/DESCRIPTION 文件推断许可证。人工补 `what/arch/run/deps/lim`，自定义许可证写 `license_note`。活跃度：≤30/90/365 天分四档；功能已完备、刻意低频更新的成熟工具设 `"stable": true`，表格显示“成熟稳定”而不是“停滞”。
+- 仓库：`scripts/github_repos.py <data_dir>/repos.json`：GitHub API 取 stars、forks、`license.spdx_id`、`pushed_at`、默认分支最近提交、latest release、archived（设 `GITHUB_TOKEN`；匿名 60 次/小时）；被限速时自动回退到公开页面 + Atom，并从原始 LICENSE/DESCRIPTION 文件推断许可证。人工补 `what/arch/run/deps/lim`，自定义许可证写 `license_note`，可加 `dirs`（方向键）让报告显示“各方向开源情况”。活跃度：≤30/90/365 天分四档；功能已完备、刻意低频更新的成熟工具设 `"stable": true`，表格显示“成熟稳定”而不是“停滞”。
+- **不是每个方向都有代码**：湿实验/实验型方向（样本采集、组织库、动物/细胞实验、临床队列等）通常不发布代码仓库，**不要硬凑仓库**（不要把无关工具、个人脚本或社区复现塞进去充数）。在 `meta.directions[]` 里给这类方向设 `"repo_expected": false` 和一句 `no_repo_reason`，改为收集**非代码资源**写进该方向的 `resources`（数据集、实验方案/protocols、数据门户、生物样本库，`{name,url,kind,note}`）；打了该方向 `dirs` 的门户会自动列入。报告的开源板块对这些方向只显示一句说明和资源清单，不显示空条目；`--check` 不会因方向没有仓库而报警（某方向零仓库本身也不会报警）。整个主题都是湿实验时可以不写 `repos.json`。
 
 ## 4. 生成 HTML → 详见 [references/data-schema.md](references/data-schema.md)、[references/html-build-and-verify.md](references/html-build-and-verify.md)
 1. 新建数据目录（可复制 `examples/agent-science-mini/` 再替换内容）：`meta.json`、`works.json`、`teams.json`、`timeline.json`、`repos.json`、可选 `portals.json`、`narrative/{summary,scope,challenges,caveats}.html`。
@@ -48,7 +49,7 @@ description: Use when the user asks for a comprehensive literature or field surv
 3. `python scripts/build.py <data_dir> --check`，修完 error、看过 warning 后 `python scripts/build.py <data_dir> -o out/survey.html`。输出单个自包含 HTML（内联 ECharts 与地图，离线可用）；缺省的板块自动隐藏、目录自动编号；未写 `meta.period` 时柱状图按数据跨度自动选年/半年/季度。
 
 ## 5. 截图验证（交付前必做）
-`python scripts/screenshot.py out/survey.html --outdir out/screens`：自动使用 Playwright 自带 Chromium，没有则自动找系统 Chrome/Chromium（也可 `--chrome PATH`）；检查 console 报错、横向溢出、空图表，截取首屏和**所有可见板块**（含摘要、范围、趋势、注意事项），长板块另按视口切成 `_p1/_p2…` 便于阅读。**逐张查看**：中文无方块字、地图着色且点击面板有内容、所有图表渲染、表格行数正确、长标签没有被截断。有问题修数据/模板后重建。
+`python scripts/screenshot.py out/survey.html --outdir out/screens`：自动使用 Playwright 自带 Chromium，没有则自动找系统 Chrome/Chromium（也可 `--chrome PATH`）；检查 console 报错、横向溢出、空图表，截取首屏和**所有可见板块**（含摘要、范围、趋势、注意事项），长板块另按视口切成 `_p1/_p2…` 便于阅读。**逐张查看**：中文无方块字、地图着色且点击面板有内容、所有图表渲染、表格行数正确、长标签没有被截断；代表作表的日期与标题不重叠（窄屏下自动变为卡片，可用 `--width 800` 再截一次）；无代码方向在开源板块显示说明而不是空条目。有问题修数据/模板后重建。
 
 ## 6. 交付
 给用户：HTML 路径、截图、`references.bib/.ris`、数据目录（便于以后增补）、检索日志（`search_log.tsv`）；在回复里说明核查日期（带时区）、收录规模、主要局限与未核实项。

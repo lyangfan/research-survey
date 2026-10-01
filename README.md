@@ -78,11 +78,11 @@ python scripts/screenshot.py out/my-survey.html --outdir out/screens
 
 | 文件 | 每条记录的关键字段 |
 |---|---|
-| `meta.json` | `title`、`check_date`、`time_range`（可选，仅用户指定时间范围时填写）、`directions[{key,name,en,short,color,summary,challenges}]`、`phases`、`event_categories`、`map{resolution,merge}`、`extra_refs` |
+| `meta.json` | `title`、`check_date`、`time_range`（可选，仅用户指定时间范围时填写）、`directions[{key,name,en,short,color,summary,challenges, repo_expected, no_repo_reason, resources}]`（湿实验等无代码方向设 `repo_expected: false`）、`phases`、`event_categories`、`map{resolution,merge}`、`extra_refs` |
 | `works.json` | `name`、`title`、`dirs[]`（首个为主方向）、`featured`（里程碑，树图优先）、`inst`、`country`（ISO2）、`date`（首次公开日期）、`status`、`peer`、`venue_type`、`authors`（全部作者）、`corporate_author`、`doi`、`preprint_doi`、`arxiv`、`url`、`contrib`、`checked` |
 | `teams.json` | `name`、`country`、`region`、`type`、`dirs[]`、`works`、`progress`(1–4)、`ach` |
 | `timeline.json` | `date`、`phase`、`cat`、`title`、`desc`、`url` |
-| `repos.json` | 手写 `repo`、`cat`、`what`、`arch`、`run`、`deps`、`lim`、`license_note`、`stable`；抓取 `stars`、`forks`、`license`、`last_commit`、`release`、`archived` |
+| `repos.json` | 手写 `repo`、`cat`、`dirs`（可选）、`what`、`arch`、`run`、`deps`、`lim`、`license_note`、`stable`；抓取 `stars`、`forks`、`license`、`last_commit`、`release`、`archived` |
 | `portals.json`（可选） | `name`、`url`、`kind`、`org`、`scope`、`access`；`check_urls.py --write` 写入 `url_status`、`url_checked` |
 | `narrative/*.html` | `summary`、`scope`、`challenges`、`caveats` 四段 HTML |
 

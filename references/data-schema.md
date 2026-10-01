@@ -8,7 +8,7 @@
   works.json         代表性工作（论文/预印本/博客/产品）
   teams.json         团队/机构
   timeline.json      时间轴事件
-  repos.json         开源仓库（手写字段 + github_repos.py 抓取字段）
+  repos.json         开源仓库（手写字段 + github_repos.py 抓取字段；所有方向都 repo_expected=false 时可省略）
   portals.json       数据门户/数据库/在线工具（可选；check_urls.py 写入链接状态）
   narrative/
     summary.html     执行摘要（HTML 片段，可用 .kf-grid/.kf 卡片、<b id="s-works"></b> 自动填数字）
@@ -31,7 +31,7 @@
 | `time_range` | | **仅当用户明确指定了时间范围时填写**，如 `{"start":"2024-01","end":"2026-10"}`（可只写 `start` 或 `end`）；决定柱状图横轴，`--check` 会提示落在范围外的条目。**没有默认值**：用户没指定就整个省略，表示未设时间限制，此时柱状图横轴按数据中最早到最晚年份自动确定，页面不显示时间段 |
 | `period` | | `half` / `year` / `quarter`。省略时按数据跨度自动选：>6 年用 `year`，只有 1 年用 `quarter`，否则 `half` |
 | `taxonomy_root` | | 树图根节点文字（可含 `\n`）|
-| `directions` | ✔ | `[{key,name,en,short,color,summary,challenges}]`；`key` 用短英文大写（`LIT`），`summary/challenges` 可含 HTML |
+| `directions` | ✔ | `[{key,name,en,short,color,summary,challenges}]`；`key` 用短英文大写（`LIT`），`summary/challenges` 可含 HTML。可选：`repo_expected`、`no_repo_reason`、`resources`（见下）|
 | `phases` | | `[{key:"P1",title,desc}]` 时间轴阶段卡片 |
 | `event_categories` | | `{类别名: 颜色}`；未列出的类别自动配色 |
 | `progress_levels` | | 4 个进展等级文案（团队卡片）|
@@ -43,6 +43,25 @@
 | `country_names` | | 覆盖国家显示名 `{ "HK": "中国香港" }` |
 | `extra_refs` | | `[{title,url,note}]` 额外参考资料（博客、新闻）|
 | `footer` | | 页脚文字 |
+
+### 没有代码仓库的方向（`directions[]` 可选字段）
+
+湿实验/实验型方向（样本采集与组织库、动物或细胞实验、临床队列、测序数据生产等）通常不发布代码，不要为它们硬凑仓库。
+
+| 字段 | 说明 |
+|---|---|
+| `repo_expected` | `false` = 该方向按惯例不发布代码仓库（默认 `true`）。别名：`"no_repo": true` 或 `"no_repo": "原因"` |
+| `no_repo_reason` | 一句话原因，显示在开源板块和方向卡片上；缺省为“该方向以湿实验为主，通常不发布代码仓库。” |
+| `resources` | 非代码资源 `[{name, url, kind, note}]`（`kind` 如 `数据集`、`实验方案`、`数据门户`、`生物样本库`；也可只写名称字符串）。`portals.json` 中 `dirs` 含该方向的门户会自动补进来；有 URL 的资源加入参考文献 |
+
+效果：开源板块出现“各方向开源情况”（仓库带 `dirs` 时，每个方向显示仓库数，点击筛选表格）或“以实验为主、不发布代码仓库的方向”（仓库不带 `dirs` 时只列这些方向），无代码方向只显示说明 + 资源清单，不显示空的图表/表格条目；一个仓库都没有时板块只保留这些说明。`--check`：方向没有仓库**不报警**（无论是否标记）；`repo_expected` 不是布尔值、`resources` 缺 `name` 报 error，缺 `url` 提示；仓库的 `dirs` 指向标了 `repo_expected: false` 的方向会提示矛盾。
+
+```json
+{"key": "BIO", "name": "组织样本采集与生物样本库", "short": "样本库", "repo_expected": false,
+ "no_repo_reason": "该方向以湿实验与样本采集为主，通常不发布代码仓库。",
+ "resources": [{"name": "GTEx Tissue Harvesting SOP", "url": "https://…", "kind": "实验方案"},
+               {"name": "dbGaP phs000424", "url": "https://…", "kind": "数据集", "note": "受控访问"}]}
+```
 
 ## works.json（每条一项工作）
 
@@ -103,7 +122,7 @@
 
 ## repos.json
 
-手写字段：`repo`（owner/name）、`cat`、`what`（做什么）、`arch`（架构/组件）、`run`（如何运行）、`deps`（依赖）、`lim`（局限）、`license_note`（人工核对后的许可证说明，优先于抓取值）、`exclude`（true 则不展示）、`stable`（true = 功能完备、刻意低频更新的成熟工具：超过停滞阈值时表格显示“成熟稳定（低频更新）”而不是“停滞”）。
+手写字段：`repo`（owner/name）、`cat`、`dirs`（可选，方向键列表；有了它开源板块按方向统计仓库数并可按方向筛选，未知方向报 error）、`what`（做什么）、`arch`（架构/组件）、`run`（如何运行）、`deps`（依赖）、`lim`（局限）、`license_note`（人工核对后的许可证说明，优先于抓取值）、`exclude`（true 则不展示）、`stable`（true = 功能完备、刻意低频更新的成熟工具：超过停滞阈值时表格显示“成熟稳定（低频更新）”而不是“停滞”）。
 
 抓取字段（`github_repos.py` 写入，保留手写字段）：`canonical`、`stars`、`forks`、`license`、`pushed_at`、`last_commit`、`release:{tag,date}`、`archived`、`description`、`fetched_at`、`fetch_method`（`api` 或 `html+atom`）。
 
