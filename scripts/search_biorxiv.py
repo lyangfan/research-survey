@@ -7,6 +7,16 @@ cursor pagination), optionally filtered by subject category. This script pages t
 window and keeps records whose title/abstract match your keywords locally.
 It can also look up whether a preprint was later published (pubs endpoint -> published_doi).
 
+KEYWORD SEARCH: the window mode has to download every record in the window, so a no-time-limit
+keyword search means scanning the whole archive (hundreds of thousands of records) — usually
+impractical. For topic searches use Europe PMC instead, which indexes bioRxiv/medRxiv:
+  python search_europepmc.py search '"your topic"' --preprints --out ep_ppr.jsonl
+then use `doi` mode here for version, corresponding institution and published-version details.
+
+DOIs: bioRxiv/medRxiv used 10.1101/YYYY.MM.DD.NNNNNN until Nov 2025 and the openRxiv prefix
+10.64898/YYYY.MM.DD.NNNNNN(NN) from 2025-12-01; both work in `doi` mode (a doi.org URL is fine,
+and the other server is tried automatically when the DOI is not found on --server).
+
 The date window is how this API pages, not a time restriction: without --from/--to the window
 is the WHOLE archive (server launch -> today), i.e. no time filter. Pass --from/--to only when
 the user explicitly asked for a time range; narrow a full-archive scan with --category instead.
@@ -24,6 +34,7 @@ Examples
   python search_biorxiv.py window --server biorxiv --from 2025-01-01 --to 2025-03-31 \
       --category bioinformatics --kw "large language model" --kw agent --out brx.jsonl
   python search_biorxiv.py doi 10.1101/2024.12.31.630767
+  python search_biorxiv.py doi 10.64898/2026.08.30.748055
 """
 import argparse
 import datetime as dt
@@ -31,7 +42,7 @@ import json
 import re
 import time
 
-from common import get_json, log, write_jsonl, today
+from common import get_json, log, norm_doi, write_jsonl, today
 
 BASE = "https://api.biorxiv.org"
 # first posting dates; used as the window start when no --from is given (= no time filter)
@@ -79,10 +90,19 @@ def window(server, d_from=None, d_to=None, category=None, kws=(), mode="all", ma
 
 
 def by_doi(server, doi):
-    d = get_json(f"{BASE}/details/{server}/{doi}")
-    rows = [norm(c, server) for c in d.get("collection", [])][-1:]
+    doi = norm_doi(doi) or doi
+    rows = []
+    for srv in [server] + [s for s in ARCHIVE_START if s != server]:
+        d = get_json(f"{BASE}/details/{srv}/{doi}")
+        rows = [norm(c, srv) for c in d.get("collection", [])][-1:]
+        if rows:
+            server = srv
+            break
+    if not rows:
+        log(f"[biorxiv] {doi}: not found on bioRxiv or medRxiv")
+        return []
     p = get_json(f"{BASE}/pubs/{server}/{doi}").get("collection", [])
-    if rows and p:
+    if p:
         rows[0]["published"] = p[0].get("published_doi", "")
         rows[0]["published_journal"] = p[0].get("published_journal", "")
     return rows

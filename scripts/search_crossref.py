@@ -2,6 +2,10 @@
 # -*- coding: utf-8 -*-
 """Crossref REST API helper (https://api.crossref.org) — DOI verification & venue lookup.
 
+`date` is the first public date (published-online, or `posted` for preprints) rather than the
+print issue date; `date_online` / `date_print` are both kept. Use `doi` mode to fix dates of
+records whose source only had the issue date (Europe PMC / PubMed often do).
+
 No key needed. Add SURVEY_MAILTO=you@example.org to join the "polite" pool (faster, fewer 429s).
 
 Examples
@@ -27,11 +31,20 @@ def _p(extra):
     return p
 
 
+def _dp(m, k):
+    dp = (m.get(k) or {}).get("date-parts")
+    if dp and dp[0] and dp[0][0]:
+        return "-".join(f"{x:02d}" if i else str(x) for i, x in enumerate(dp[0]))
+    return ""
+
+
 def _date(m):
-    for k in ("published-print", "published-online", "issued", "created"):
-        dp = (m.get(k) or {}).get("date-parts")
-        if dp and dp[0] and dp[0][0]:
-            return "-".join(f"{x:02d}" if i else str(x) for i, x in enumerate(dp[0]))
+    """First public date = published-online (or posted, for preprints) when Crossref has it;
+    the print issue date is often 1-3 months later. Falls back to print / issued / created."""
+    for k in ("published-online", "posted", "published-print", "issued", "created"):
+        d = _dp(m, k)
+        if d:
+            return d
     return ""
 
 
@@ -39,7 +52,8 @@ def norm(m):
     return dict(
         source="crossref", title=(m.get("title") or [""])[0],
         authors=[(" ".join(filter(None, [a.get("given"), a.get("family")])) or a.get("name", "")) for a in m.get("author") or []],
-        date=_date(m), venue=(m.get("container-title") or [""])[0], type=m.get("type"),
+        date=_date(m), date_online=_dp(m, "published-online") or _dp(m, "posted"), date_print=_dp(m, "published-print"),
+        venue=(m.get("container-title") or [""])[0], type=m.get("type"),
         publisher=m.get("publisher"), doi=(m.get("DOI") or "").lower(), url=m.get("URL"),
         volume=m.get("volume", ""), issue=m.get("issue", ""), pages=m.get("page", ""),
         relation=list((m.get("relation") or {}).keys()),  # e.g. is-preprint-of / has-preprint

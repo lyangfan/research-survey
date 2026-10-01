@@ -1,66 +1,61 @@
 ---
 name: research-survey-html
-description: Use when the user asks for a comprehensive literature or field survey (调研/综述/领域梳理) on any research topic, delivered as a visual, interactive, self-contained HTML report — includes how to search and verify literature, build taxonomy/teams/map/repo sections, export references to Zotero, and screenshot-check the result.
+description: Use when the user asks for a comprehensive literature or field survey (调研/综述/领域梳理) on any research topic, delivered as a visual, interactive, self-contained HTML report — includes how to search and verify literature, build taxonomy/teams/map/portal/repo sections, export references to Zotero, and screenshot-check the result.
 ---
 
 # 研究领域调研 → 交互式 HTML 报告
 
-把“某个研究方向的进展”做成一份**可核查、可交互、离线可用**的单文件 HTML 综述：时间轴、方向分类树、可筛选的代表作表、团队卡片、世界热力图（点击国家看名单）、开源仓库图表、参考文献，并导出 BibTeX/RIS 供 Zotero 导入。
+把“某个研究方向的进展”做成一份**可核查、可交互、离线可用**的单文件 HTML 综述：时间轴、方向分类树、可筛选的代表作表、团队卡片、世界热力图（点击国家看名单）、数据门户表、开源仓库图表、参考文献，并导出 BibTeX/RIS 供 Zotero 导入。
 
 本文件所在目录记为 `SKILL_DIR`。脚本在 `SKILL_DIR/scripts/`，详细说明在 `SKILL_DIR/references/`，示例数据在 `SKILL_DIR/examples/agent-science-mini/`。检索与构建只依赖 Python 3.9+ 标准库；截图需要 `playwright`。
 
 ## 0. 先问清范围（一次问完；除时间范围外，用户没说的给默认值并写进报告）
-1. **主题**与边界（包含/不包含什么，相邻领域怎么处理）。
+1. **主题**与边界（包含/不包含什么，相邻领域怎么处理），以及**所属学科**（决定用哪套数据源，见第 1 步）。
 2. **时间范围**：**没有默认值，不要自行加任何时间限制**（不要默认“最近几年”，也不要主动提议某个时间窗口）。
    - 只有用户**明确给出**时间范围（如“2023 年以来”“近三年”“2024-01 至今”）时，才把它换算成具体日期（相对说法以今天为基准），写进 `meta.time_range`，并作为约束用于检索（`--from/--to`、`--year`、各数据源的日期语法）和筛选。
    - 用户没提：检索时**不传任何日期参数**、筛选时**不按日期排除**，早期与近期工作一视同仁，按相关性与重要性取舍；`meta.json` 不写 `time_range`。
    - 报告“范围与方法”写明：用户指定的时间范围，或“未设时间限制”。
 3. **是否收录预印本**（默认收录，逐条标注状态）；是否收录博客/产品/新闻。
 4. **输出语言**（默认与用户一致，如简体中文 + 英文术语）与读者（导师、组会、自己入门）。
-5. **规模与板块**：代表作数量（默认 50–150）、是否需要团队/地图/开源仓库板块；输出路径；是否导出 Zotero。
+5. **规模与板块**：代表作数量（默认 50–150）、是否需要团队/地图/数据门户/开源仓库板块；输出路径；是否导出 Zotero。
 
 ## 1. 查文献（如何查文献）→ 详见 [references/literature-search.md](references/literature-search.md)
-1. **设计检索式**：拆成 2–4 个概念块，每块扩展同义词/缩写/上下位词/中文词；从种子论文和综述反向抽词；按各数据源语法分别改写；记录每轮检索式、日期、命中数（写进“范围与方法”）。
-2. **多源检索**（脚本输出统一 JSONL 候选）：
-   - 日期参数一律可选、脚本默认不做日期过滤：**只有用户指定了时间范围**才给下列命令加 `--from/--to`（S2 用 `--year`）。
-   - arXiv：`scripts/search_arxiv.py --query 'abs:"…" AND cat:cs.AI' [--from … --to …]`（**≤1 次/3 秒、单连接**；持续 429 就停，改用 Semantic Scholar batch / OpenAlex / abs 页面核对）。
-   - Semantic Scholar：`scripts/search_s2.py search|bulk|batch|refs|cites`（建议设 `S2_API_KEY`）。
-   - OpenAlex：`scripts/search_openalex.py search …`（2026-02 起需 `OPENALEX_API_KEY`，单条 DOI 查询免费）。
-   - Crossref：`scripts/search_crossref.py doi|title …`（DOI/venue 核对，设 `SURVEY_MAILTO`）。
-   - bioRxiv/medRxiv：`scripts/search_biorxiv.py window --category … --kw … [--from … --to …]`（API 无关键词搜索，按日期窗口拉取后本地过滤；不传日期时扫描整个存档（服务器上线至今），用 `--category` 缩小；`/pubs/` 查是否已正式发表）。
-   - PubMed：`scripts/search_pubmed.py '…[tiab]'`。
-   - DBLP、OpenReview：核对 CS 会议是否录用（端点见参考文档）。
-   - Hugging Face Papers（Papers with Code 已于 2025-07 停服并跳转至此）：找有代码的热门工作。
-   - Google Scholar、知网：**只人工检索**，不写爬虫；用 Zotero Connector 保存。
-   - 公司/实验室博客、新闻：用 WebSearch/WebFetch，标为“未经同行评审/公司自报”。
+1. **设计检索式**：拆成 2–4 个概念块，每块扩展同义词/缩写/上下位词/中文词；从种子论文和综述反向抽词；按各数据源语法分别改写。先 `export SURVEY_QUERY_LOG=search_log.tsv`：PubMed/Europe PMC/S2/OpenAlex 脚本会把每条检索式**逐字**、命中总数和时间追加进去（写进“范围与方法”）。
+2. **按学科选数据源**（脚本输出统一 JSONL 候选；日期参数一律可选、默认不做日期过滤，**只有用户指定了时间范围**才加 `--from/--to`，S2 用 `--year`）：
+   - **生命科学/医学**：PubMed `scripts/search_pubmed.py '…[tiab] OR …[mh]' --max 1000`（按相关性分页取回，自动取摘要/第一单位/MeSH，打印总命中数和 MeSH 映射）；Europe PMC `scripts/search_europepmc.py search '…'`（含期刊 + 预印本、单位与被引数；`--preprints` = `SRC:PPR`，是按关键词找 bioRxiv/medRxiv 的入口）；bioRxiv/medRxiv `scripts/search_biorxiv.py doi …`（版本、通讯单位、`published` 正式版 DOI；窗口模式要扫全库，不适合无时间限制的关键词检索）；联盟/项目官网的 Publications 页与数据门户（用 WebFetch 核对，门户写进 `portals.json`）；按需 OpenAlex/Crossref。联盟作者（如 “GTEx Consortium”）用 PubMed `[cn]` 检索。
+   - **计算机/AI**：arXiv `scripts/search_arxiv.py --query 'abs:"…" AND cat:cs.AI'`（**≤1 次/3 秒、单连接**；持续 429 就停）；Semantic Scholar `scripts/search_s2.py search|bulk|batch|refs|cites`（建议设 `S2_API_KEY`；429 会退避重试，仍失败则保存已取到的结果并以退出码 2 结束，改用 OpenAlex/Europe PMC）；DBLP、OpenReview 核对会议录用；Hugging Face Papers 找有代码的工作。
+   - **通用/其他学科**：OpenAlex `scripts/search_openalex.py search …`（2026-02 起需 `OPENALEX_API_KEY`；额度耗尽立即停止并提示，不会挂起；单条 DOI 查询免费）、Crossref `scripts/search_crossref.py doi|title …`（设 `SURVEY_MAILTO`）、S2；再加该学科自己的数据库。
+   - Google Scholar、知网：**只人工检索**，不写爬虫；用 Zotero Connector 保存。公司/实验室博客、新闻：用 WebSearch/WebFetch，标为“未经同行评审/公司自报”。
 3. **滚雪球**：5–15 篇种子论文做后向（refs）+ 前向（cites），新增相关条目 <5% 时停止。
-4. **合并去重与筛选**：`scripts/merge_dedup.py cand_*.jsonl --out candidates.jsonl --csv screening.csv` → 在 CSV 中填 `include=1` 和 `dirs` → `--screened screening.csv --works-draft works_draft.json` 生成 works 草稿。去重键：DOI（非 arXiv DOI）> arXiv ID > 规范化标题；预印本与正式版合并为一条。只有用户指定了时间范围才按日期排除条目。
-5. **标注状态**：`peer: true` 仅限官方渠道可查的期刊/会议（含 workshop，需写明）；预印本、博客、产品、公司自报一律 `peer: false` 并在 `status` 写清楚；只有作者自述的录用写“据 README，未核对官方名单”。
-6. **核查规则**：绝不编造；每条要有可点击 `url` 和 `checked` 日期；机构/国家查不到写“—（未核实）”、`country` 留空、不计入地图；动态数字注明抓取日期；最终抽查 10%。
-7. **导出 Zotero**：`scripts/export_bibtex.py <data_dir> --out out/references` → `.bib`、`.ris`（方向键成为标签）和 `zotero_identifiers.txt`（粘贴到 Zotero“魔棒”最完整）。
+4. **合并去重与筛选**：`scripts/merge_dedup.py cand_*.jsonl --out candidates.jsonl --csv screening.csv [--csv-sort citations]` → 在 CSV 中填 `include=1`、`dirs`，里程碑填 `featured=1` → `--screened screening.csv --works-draft works_draft.json` 生成 works 草稿。去重键：DOI（非 arXiv DOI）> arXiv ID > 规范化标题；预印本与正式版合并为一条（bioRxiv `published` 字段自动合并，正式版 DOI 为 `doi`、预印本 DOI 存 `preprint_doi`）。候选很多时可以读标题/摘要在 Python 里整理，但要记录纳入标准。只有用户指定了时间范围才按日期排除条目。
+5. **标注状态**：`peer: true` 仅限官方渠道可查的期刊/会议（含 workshop，需写明）；预印本、博客、产品、公司自报一律 `peer: false` 并在 `status` 写清楚；预印本 DOI 前缀：bioRxiv/medRxiv `10.1101/YYYY.MM.DD.…`（2025-11 前）与 `10.64898/…`（2025-12-01 起），`build.py --check` 会提示 `peer: true` 却是预印本 DOI 的条目；只有作者自述的录用写“据 README，未核对官方名单”。
+6. **核查规则**：绝不编造；每条要有可点击 `url` 和 `checked` 日期；`date` = **首次公开日期**（预印本日期或期刊在线日期，不是纸质刊期；可用 `search_crossref.py doi` 的 `date_online` 核对）；机构/国家查不到写“—（未核实）”、`country` 留空、不计入地图（脚本给的 `country_guess` 只是提示）；动态数字注明抓取日期；最终抽查 10%。
+7. **导出 Zotero**：`scripts/export_bibtex.py <data_dir> --out out/references` → `.bib`、`.ris`（方向键成为标签）和 `zotero_identifiers.txt`（粘贴到 Zotero“魔棒”最完整）。`authors` 写**全部作者**、不要写 “et al.”；“Smith AB”（PubMed 格式）、“Anna B. Smith”、“Smith, Anna” 都能正确导出；联盟作者（“GTEx Consortium”）或 `corporate_author` 字段导出为单个机构作者。
 
 ## 2. 方向分类、团队与国家 → 详见 [references/taxonomy-and-teams.md](references/taxonomy-and-teams.md)
 - 自下而上卡片分组 + 对照 2–4 篇综述命名；6–12 个方向，可交叉，但 `dirs` 第一个为**主方向**；每个方向写现状与主要难题；按里程碑划 3–6 个阶段。
+- **里程碑**：每个方向挑 1–3 个奠基/旗舰工作标 `"featured": true`（不超过 `tree_leaves`）。树图优先显示它们，其余叶子按 `meta.tree_sort` 选（默认 `auto`：有 `citations` 按被引数，没有时间范围时按时间均匀取样，否则取最新），避免不设时间限制时只剩新论文。
 - 团队粒度到课题组/研究部门；进展等级 1–4；只写有来源的事实。
-- 国家用 ISO alpha-2。**团队数**按团队主要所在地（跨国公司按成果主要团队所在地）；**代表作数**按第一/主导机构；主导者不唯一则不计。地区口径（如香港）写进报告，地图可用 `map.merge` 合并。
+- 国家用 ISO alpha-2。**团队数**按团队主要所在地（跨国公司按成果主要团队所在地）；**代表作数**按第一/主导机构（联盟论文按牵头/通讯单位，无法唯一确定则不计）；地区口径（如香港）写进报告，地图可用 `map.merge` 合并。
 
-## 3. 开源仓库 → 详见 [references/repo-inspection.md](references/repo-inspection.md)
-`scripts/github_repos.py <data_dir>/repos.json`：GitHub API 取 stars、forks、`license.spdx_id`、`pushed_at`、默认分支最近提交、latest release、archived（设 `GITHUB_TOKEN`；匿名 60 次/小时）；被限速时自动回退到公开页面 + commits/releases Atom。人工补 `what/arch/run/deps/lim`，自定义许可证写 `license_note`。活跃度：≤30/90/365 天分四档。
+## 3. 数据门户与开源仓库 → 详见 [references/repo-inspection.md](references/repo-inspection.md)
+- **数据门户/数据库/在线工具 ≠ 代码仓库**：写进 `portals.json`（名称、URL、类型、机构、覆盖范围、访问方式），用 `scripts/check_urls.py <data_dir> --only portals --write` 做存活检查（HEAD→GET、带超时；结果显示在报告里），也可 `check_urls.py <data_dir>` 检查全部链接。
+- 仓库：`scripts/github_repos.py <data_dir>/repos.json`：GitHub API 取 stars、forks、`license.spdx_id`、`pushed_at`、默认分支最近提交、latest release、archived（设 `GITHUB_TOKEN`；匿名 60 次/小时）；被限速时自动回退到公开页面 + Atom，并从原始 LICENSE/DESCRIPTION 文件推断许可证。人工补 `what/arch/run/deps/lim`，自定义许可证写 `license_note`。活跃度：≤30/90/365 天分四档；功能已完备、刻意低频更新的成熟工具设 `"stable": true`，表格显示“成熟稳定”而不是“停滞”。
 
 ## 4. 生成 HTML → 详见 [references/data-schema.md](references/data-schema.md)、[references/html-build-and-verify.md](references/html-build-and-verify.md)
-1. 新建数据目录（可复制 `examples/agent-science-mini/` 再替换内容）：`meta.json`、`works.json`、`teams.json`、`timeline.json`、`repos.json`、`narrative/{summary,scope,challenges,caveats}.html`。
-2. 写 narrative：执行摘要（5–8 条关键发现，每条有事实和来源）、范围与方法（时间范围：用户指定的范围或“未设时间限制”；来源、检索方式、状态标注、计数口径、核查日期与时区）、挑战与趋势、注意事项与未核实项。
-3. `python scripts/build.py <data_dir> --check`，修完 error 后 `python scripts/build.py <data_dir> -o out/survey.html`。输出单个自包含 HTML（内联 ECharts 与地图，离线可用）；缺省的板块自动隐藏、目录自动编号。
+1. 新建数据目录（可复制 `examples/agent-science-mini/` 再替换内容）：`meta.json`、`works.json`、`teams.json`、`timeline.json`、`repos.json`、可选 `portals.json`、`narrative/{summary,scope,challenges,caveats}.html`。
+2. 写 narrative：执行摘要（5–8 条关键发现，每条有事实和来源）、范围与方法（时间范围：用户指定的范围或“未设时间限制”；来源、检索式与命中数、状态标注、计数口径、核查日期与时区）、挑战与趋势、注意事项与未核实项（含失效链接）。
+3. `python scripts/build.py <data_dir> --check`，修完 error、看过 warning 后 `python scripts/build.py <data_dir> -o out/survey.html`。输出单个自包含 HTML（内联 ECharts 与地图，离线可用）；缺省的板块自动隐藏、目录自动编号；未写 `meta.period` 时柱状图按数据跨度自动选年/半年/季度。
 
 ## 5. 截图验证（交付前必做）
-`python scripts/screenshot.py out/survey.html --outdir out/screens [--chrome /usr/bin/google-chrome]`：检查 console 报错、横向溢出、空图表并截取各板块。**逐张查看**：中文无方块字、地图着色且点击面板有内容、所有图表渲染、表格行数正确。有问题修数据/模板后重建。
+`python scripts/screenshot.py out/survey.html --outdir out/screens`：自动使用 Playwright 自带 Chromium，没有则自动找系统 Chrome/Chromium（也可 `--chrome PATH`）；检查 console 报错、横向溢出、空图表，截取首屏和**所有可见板块**（含摘要、范围、趋势、注意事项），长板块另按视口切成 `_p1/_p2…` 便于阅读。**逐张查看**：中文无方块字、地图着色且点击面板有内容、所有图表渲染、表格行数正确、长标签没有被截断。有问题修数据/模板后重建。
 
 ## 6. 交付
-给用户：HTML 路径、截图、`references.bib/.ris`、数据目录（便于以后增补）、检索日志；在回复里说明核查日期（带时区）、收录规模、主要局限与未核实项。
+给用户：HTML 路径、截图、`references.bib/.ris`、数据目录（便于以后增补）、检索日志（`search_log.tsv`）；在回复里说明核查日期（带时区）、收录规模、主要局限与未核实项。
 
 ## 注意事项 → 详见 [references/quality-checklist.md](references/quality-checklist.md)
-- 收录偏向英文与高影响力来源，地图/排名只代表样本；预印本状态与星标会变，以核查日期为准。
+- 收录偏向英文与高影响力来源，地图/排名只代表样本；预印本状态、门户可用性与星标会变，以核查日期为准。
 - 不抓取 Google Scholar，不绕过限速/反爬；API 规则会变化，以官方文档为准。
 - 媒体与公司自报数字要标注来源；不要把预印本写成“已发表”。
-- Natural Earth 地图边界不代表政治立场；在中国大陆正式出版请用经审核的标准地图（`--world`）。
+- Natural Earth 地图边界不代表政治立场；在中国大陆正式出版请用经审核的标准地图（`--world`）。首次构建需联网下载地图（之后用缓存），离线环境用 `--world`。
 - 内联的 ECharts 为 Apache-2.0，分发 HTML 时保留其版权声明（模板已含注释，见 NOTICE）。

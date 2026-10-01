@@ -5,10 +5,12 @@
 ```bash
 # 在仓库根目录
 python scripts/build.py examples/agent-science-mini -o out/agent-science-mini.html
-python scripts/screenshot.py out/agent-science-mini.html --outdir out/screens   # 可加 --chrome /usr/bin/google-chrome
+python scripts/screenshot.py out/agent-science-mini.html --outdir out/screens   # 自动使用 Playwright Chromium 或系统 Chrome（也可 --chrome PATH）
 python scripts/export_bibtex.py examples/agent-science-mini --out out/references
 ```
 
 `meta.json` 中的 `time_range` 和 `kicker` 里的时间段来自原综述用户的明确要求，并非技能默认值：技能本身不设默认时间范围，用户没指定时间范围就省略 `time_range`（页面不显示时间段，“范围与方法”写“未设时间限制”）。
 
 `meta.json` 中 `map.resolution: "50m"`（显示新加坡），`map.merge` 把台湾、香港、澳门几何并入 `CN`，与“范围与方法”中的计数口径一致。
+
+`works.json` 中有 3 条标了 `"featured": true`（The AI Scientist、AI co-scientist、CRESt）：它们是里程碑/旗舰工作，分类树图优先显示，代表作表可用“★ 仅里程碑”筛选。

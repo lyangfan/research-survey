@@ -7,6 +7,11 @@ export OPENALEX_API_KEY=...  Free key = $1/day budget (~1,000 searches or ~10,00
 calls; single-work lookups by DOI/ID are free). Keyless calls share a tiny per-IP budget and
 may return 429 "Insufficient budget". Check usage: https://api.openalex.org/rate-limit?api_key=KEY
 
+Never hangs: each call retries at most --retries times (Retry-After capped at 60 s), the whole
+run stops after --timeout seconds (default 300), and a 429 "Insufficient budget" stops at once
+(the budget refills daily, retrying cannot help). Records fetched so far are still written, a
+warning suggests fallbacks (Europe PMC / PubMed / Crossref) and the exit code is 2.
+
 No date filter is applied unless --from/--to are given; pass them only when the user
 explicitly asked for a time range.
 
@@ -18,10 +23,36 @@ Examples
 """
 import argparse
 import os
+import sys
+import time
+import urllib.error
 
-from common import get_json, log, write_jsonl, today
+from common import get_json, log, log_query, write_jsonl, today
 
 BASE = "https://api.openalex.org"
+OPT = {"retries": 3, "timeout": 300.0}
+STATE = {"t0": time.time(), "degraded": "", "total": None}
+
+
+def _get(url, params):
+    """get_json with bounded retries and an overall deadline; None (+ STATE['degraded']) on failure."""
+    left = OPT["timeout"] - (time.time() - STATE["t0"])
+    if left <= 0:
+        STATE["degraded"] = f"--timeout {OPT['timeout']:.0f}s reached"
+        return None
+    try:
+        return get_json(url, params=params, backoff=5, retries=OPT["retries"], max_wait=60, deadline=left, timeout=min(40, max(5, left)))
+    except urllib.error.HTTPError as e:
+        body = getattr(e, "body_text", "")[:200]
+        STATE["degraded"] = f"HTTP {e.code} {body.strip()}"
+        if e.code == 429 and "budget" in body.lower():
+            STATE["degraded"] += " -> daily budget exhausted; set OPENALEX_API_KEY or wait until tomorrow"
+        if e.code in (429, 500, 502, 503, 504):
+            return None
+        raise
+    except (urllib.error.URLError, TimeoutError) as e:
+        STATE["degraded"] = f"network error: {e}"
+        return None
 
 
 def _p(extra):
@@ -74,7 +105,10 @@ def search(q, d_from=None, d_to=None, extra_filter=None, max_n=100):
         params = {"search": q, "per_page": min(100, max_n - len(rows)), "cursor": cursor}
         if filt:
             params["filter"] = ",".join(filt)
-        d = get_json(BASE + "/works", params=_p(params), backoff=5)
+        d = _get(BASE + "/works", _p(params))
+        if d is None:
+            break
+        STATE["total"] = (d.get("meta") or {}).get("count")
         rows += [norm(w) for w in d.get("results", [])]
         cursor = (d.get("meta") or {}).get("next_cursor")
         log(f"[openalex] {len(rows)}/{(d.get('meta') or {}).get('count')}")
@@ -84,7 +118,8 @@ def search(q, d_from=None, d_to=None, extra_filter=None, max_n=100):
 
 
 def by_doi(doi):
-    return [norm(get_json(f"{BASE}/works/doi:{doi}", params=_p({})))]
+    d = _get(f"{BASE}/works/doi:{doi}", _p({}))
+    return [norm(d)] if d else []
 
 
 if __name__ == "__main__":
@@ -95,7 +130,18 @@ if __name__ == "__main__":
     ap.add_argument("--to", dest="d_to", help="YYYY-MM-DD; optional; no date filter unless given (pass only when the user asked for a time range)")
     ap.add_argument("--filter", help="extra OpenAlex filter, e.g. type:article,is_oa:true")
     ap.add_argument("--max", type=int, default=100)
+    ap.add_argument("--retries", type=int, default=3, help="retries per call on 429/5xx (default 3)")
+    ap.add_argument("--timeout", type=float, default=300, help="overall time limit in seconds (default 300)")
+    ap.add_argument("--log", help="append query + hit count to this TSV (default $SURVEY_QUERY_LOG)")
     ap.add_argument("--out", default="-")
     a = ap.parse_args()
+    OPT.update(retries=a.retries, timeout=a.timeout)
     res = search(a.query, a.d_from, a.d_to, a.filter, a.max) if a.cmd == "search" else by_doi(a.query)
     write_jsonl(a.out, res)
+    if a.cmd == "search":
+        log_query(a.log, "openalex", a.query, STATE["total"], len(res), a.out, filter=a.filter,
+                  date=(f"{a.d_from or ''}..{a.d_to or ''}" if a.d_from or a.d_to else ""), degraded="yes" if STATE["degraded"] else "")
+    if STATE["degraded"]:
+        log(f"[openalex] WARNING: stopped early ({STATE['degraded']}); kept {len(res)} records.")
+        log("[openalex] Fallbacks: search_europepmc.py / search_pubmed.py for keyword search; DOI lookups stay free.")
+        sys.exit(2)
