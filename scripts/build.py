@@ -32,6 +32,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from countries import COUNTRIES  # noqa: E402
 from common import is_preprint_doi, norm_doi  # noqa: E402
+from work_names import is_hard_truncated_name  # noqa: E402
 
 NE_URLS = [
     "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_{res}_admin_0_countries.geojson",
@@ -341,6 +342,10 @@ def validate(meta, works, teams, repos, events, portals=()):
             warn(f"{tag}: status says preprint but doi {w['doi']} is not a known preprint DOI — published already?")
         if any(re.fullmatch(r"et\.? ?al\.?|等", str(a).strip(), re.I) for a in (w.get("authors") or [])):
             warn(f"{tag}: authors contains 'et al.' — list all authors (export turns a literal 'et al.' into BibTeX 'and others')")
+        if is_hard_truncated_name(w.get("name"), w.get("title")):
+            warn(f"{tag}: name is a hard-cut prefix of title ({w.get('name')!r}). "
+                 "The works table shows title. Set name to a real short name (Virtual Lab, SciMON) "
+                 "or run scripts/repair_work_names.py <data_dir>/works.json --write")
         if w.get("date") and meta.get("check_date") and w["date"] > meta["check_date"]:
             warn(f"{tag}: date {w['date']} is after check_date (issue date in the future? use the online date)")
     for i, t in enumerate(teams):

@@ -72,6 +72,7 @@ import urllib.parse
 
 from common import (PREPRINT_SERVER_RE, clean_title, dedup_key, get_json, is_preprint_doi, is_rxiv_doi, norm_arxiv,
                     norm_doi, norm_title, preprint_server, read_records, surname_key, write_jsonl, log, today)
+from work_names import truncate_words
 
 PREPRINT_VENUES = re.compile(PREPRINT_SERVER_RE.pattern + r"|openreview\.net$|^$", re.I)
 # fields that describe the preprint itself and must not leak into the journal record when merging
@@ -327,10 +328,13 @@ def merge(files, fuzzy=0.90, link_online=False, link_max=500, fv_rules=None):
                 best, score = j, s
         if best is not None and score >= fuzzy:
             link(p, best, "fuzzy")
-            best.setdefault("link_note", []).append(f"fuzzy {score:.2f} with {p.get('doi') or p.get('arxiv') or p.get('title')[:40]}")
+            best.setdefault("link_note", []).append(
+                f"fuzzy {score:.2f} with {p.get('doi') or p.get('arxiv') or truncate_words(p.get('title') or '', 40)}")
             continue
         if best is not None and score >= 0.75:
-            p["possible_published"] = f"{best.get('doi') or best.get('title')[:60]} (title sim {score:.2f}, same first author — check)"
+            p["possible_published"] = (
+                f"{best.get('doi') or truncate_words(best.get('title') or '', 60)} "
+                f"(title sim {score:.2f}, same first author — check)")
         if pubs:
             stubs.append((p, pubs[0], "published-doi"))
             continue

@@ -87,7 +87,7 @@ python scripts/screenshot.py out/my-survey.html --outdir out/screens
 | 文件 | 每条记录的关键字段 |
 |---|---|
 | `meta.json` | `title`、`check_date`、`time_range`（可选，仅用户指定时间范围时填写）、`directions[{key,name,en,short,color,summary,challenges, repo_expected, no_repo_reason, resources}]`（湿实验等无代码方向设 `repo_expected: false`）、`phases`、`event_categories`、`map{resolution,merge}`、`extra_refs` |
-| `works.json` | `name`、`title`、`dirs[]`（首个为主方向）、`primary_dir`（可选）、`featured`（里程碑，在主方向的树枝上必显示）、`found_via`（检索来源策略）、`inst`、`country`（ISO2）、`date`（首次公开日期）、`status`、`peer`、`venue_type`、`authors`（全部作者）、`corporate_author`、`doi`、`preprint_doi`/`preprint_date`、`arxiv`、`url`、`contrib`、`checked` |
+| `works.json` | `name`（简称，不是标题切片）、`title`（表内显示的完整标题）、`dirs[]`（首个为主方向）、`primary_dir`（可选）、`featured`（里程碑，在主方向的树枝上必显示）、`found_via`（检索来源策略）、`inst`、`country`（ISO2）、`date`（首次公开日期）、`status`、`peer`、`venue_type`、`authors`（全部作者）、`corporate_author`、`doi`、`preprint_doi`/`preprint_date`、`arxiv`、`url`、`contrib`、`checked` |
 | `teams.json` | `name`、`country`、`region`、`type`、`dirs[]`、`works`、`progress`(1–4)、`ach` |
 | `timeline.json` | `date`、`phase`、`cat`、`title`、`desc`、`url` |
 | `repos.json` | 手写 `repo`、`cat`、`dirs`（可选）、`what`、`arch`、`run`、`deps`、`lim`、`license_note`、`stable`；抓取 `stars`、`forks`、`license`、`last_commit`、`release`、`archived` |
