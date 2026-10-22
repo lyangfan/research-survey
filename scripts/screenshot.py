@@ -125,6 +125,38 @@ async def launch(p, chrome, allow_install=True):
 COUNT_WRAP_JS = "sid => document.querySelectorAll(\"#\" + sid + \" .tbl-wrap\").length"
 TABLE_DIMS_JS = "el => ({sh: el.scrollHeight, ch: el.clientHeight, vis: el.offsetParent !== null})"
 SET_SCROLL_JS = "(el, y) => { el.scrollTop = y; }"
+WORK_LABEL_JS = """() => {
+  const problems = [];
+  if (typeof workLabel !== 'function') return ['workLabel is missing'];
+  function bag(xs){const m=new Map(); for (const x of xs) m.set(x,(m.get(x)||0)+1); return m}
+  const texts=[...document.querySelectorAll('#wt tbody td.wn a.nm')].map(a=>a.textContent);
+  const labels=(DATA.works||[]).map(workLabel);
+  const got=bag(texts), want=bag(labels);
+  let same=got.size===want.size;
+  if (same) { for (const [k,v] of want) if (got.get(k)!==v) same=false; }
+  if (!same) {
+    const missing=labels.filter(l=>!texts.includes(l)).slice(0,3).map(s=>s.slice(0,60));
+    problems.push('works column missing full title: '+missing.join(' | '));
+  }
+  for (const el of document.querySelectorAll('#wt tbody td.wn a.nm')) {
+    const cell=el.closest('td');
+    const cs=getComputedStyle(cell), as=getComputedStyle(el);
+    if (as.whiteSpace==='nowrap') problems.push('works title nowrap: '+el.textContent.slice(0,40));
+    if ((cs.overflow==='hidden'||cs.overflowY==='hidden') && cell.scrollHeight>cell.clientHeight+2)
+      problems.push('works title clipped: '+el.textContent.slice(0,40));
+  }
+  for (const tag of document.querySelectorAll('#wt tbody td.ws .tag')) {
+    const ts=getComputedStyle(tag);
+    if (ts.whiteSpace==='nowrap' && tag.scrollWidth>tag.clientWidth+2)
+      problems.push('status tag clipped: '+tag.textContent.slice(0,40));
+  }
+  for (const a of document.querySelectorAll('#mpanel a')) {
+    const t=a.textContent;
+    const w=(DATA.works||[]).find(x=>x.name===t && workLabel(x)!==t);
+    if (w) problems.push('works list shows short name: '+t.slice(0,40));
+  }
+  return problems;
+}"""
 
 
 async def main(a):
@@ -149,6 +181,8 @@ async def main(a):
             .map(el=>el.id)""")
         if empty:
             problems.append(f"empty charts: {empty}")
+        label_problems = await pg.evaluate(WORK_LABEL_JS)
+        problems.extend(label_problems)
         stats = await pg.evaluate("""({works:document.querySelectorAll('#wt tbody tr').length,
             teams:document.querySelectorAll('#tgrid .team').length, repos:document.querySelectorAll('#rt tbody tr:not(.det)').length,
             portals:document.querySelectorAll('#pt tbody tr').length,
@@ -202,6 +236,9 @@ async def main(a):
             if await pg.evaluate("typeof showCountry==='function' && document.getElementById('map') && !document.getElementById('map').classList.contains('hidden')"):
                 await pg.evaluate("showCountry(Object.keys(DATA.cntTeam)[1]||Object.keys(DATA.cntTeam)[0])")
                 await pg.wait_for_timeout(400)
+                for item in await pg.evaluate(WORK_LABEL_JS):
+                    if item not in problems:
+                        problems.append(item)
                 n = sections.index("map") + 1 if "map" in sections else 0
                 f = os.path.join(a.outdir, f"{n:02d}b_map_click.png")
                 await pg.locator("#map").screenshot(path=f)

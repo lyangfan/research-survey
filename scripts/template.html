@@ -69,11 +69,11 @@ main h2 .no{display:inline-grid;place-items:center;width:32px;height:32px;border
 .toolbar input{min-width:min(260px,100%)}
 .count{color:var(--muted);font-size:13px}
 .tbl-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px;max-height:680px}
-table{border-collapse:collapse;width:100%;font-size:13.5px}#rt{min-width:1100px}#wt{table-layout:fixed;min-width:640px}#wt td{overflow-wrap:anywhere}#wt .tag{white-space:normal;max-width:100%;display:inline-block;border-radius:7px;line-height:1.45;padding:2px 7px;overflow-wrap:anywhere}
+table{border-collapse:collapse;width:100%;font-size:13.5px}#rt{min-width:1100px}#wt{table-layout:fixed;min-width:640px}#wt td{overflow:visible;overflow-wrap:anywhere}#wt td.wn,#wt td.wn .nm{white-space:normal;overflow-wrap:anywhere}#wt .tag{white-space:normal;overflow:visible;text-overflow:clip;max-width:100%;display:inline-block;border-radius:7px;line-height:1.45;padding:2px 7px;overflow-wrap:anywhere}
 /* works table: the date column is sized from the font's own digit width (ch), never fixed px, so a wider
    font (PingFang/YaHei/Segoe, user font settings) cannot push the date into the title; if it is still too
    narrow the date wraps at the hyphen instead of overflowing. Other columns are proportional. */
-#wt th:nth-child(1){width:calc(9.5ch + 24px)}#wt th:nth-child(2){width:19%}#wt th:nth-child(3){width:16%}#wt th:nth-child(4){width:13%}#wt th:nth-child(5){width:13%}
+#wt th:nth-child(1){width:calc(9.5ch + 24px)}#wt th:nth-child(2){width:32%}#wt th:nth-child(3){width:14%}#wt th:nth-child(4){width:12%}#wt th:nth-child(5){width:16%}
 #wt td.wd{font-variant-numeric:tabular-nums;color:#334155}#wt .dseg{display:inline-block;white-space:nowrap}
 /* narrow containers: each work becomes a card (date + status on top, then title, directions, institution, contribution) */
 .wt-wrap{container-type:inline-size}
@@ -220,6 +220,8 @@ echarts.registerMap('world',/*WORLD*/);
 const L=DATA.L, DIRS=DATA.dirs, DK=Object.keys(DIRS), DC={};DK.forEach(k=>DC[k]=DIRS[k].color);
 const W=DATA.works,T=DATA.teams,R=DATA.repos,E=DATA.events,NM=c=>DATA.names[c]||c;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function workLabel(w){const t=String((w&&w.title)||'').trim();return t||String((w&&w.name)||'').trim()}
+function workTip(w){const label=workLabel(w),name=String((w&&w.name)||'').trim();return name&&name!==label?name+' · '+label:label}
 const safeUrl=u=>/^(https?:|mailto:|#)/i.test(String(u||''))?esc(u):'#';
 const dl=s=>String(s||'').split(';').filter(Boolean);
 const dtags=ds=>dl(ds).map(k=>DIRS[k]?`<span class="dtag" style="background:${DC[k]}">${esc(DIRS[k].short)}</span>`:'').join('');
@@ -298,7 +300,7 @@ if(has.events)renderTL();
   if(CROSS!=='none'&&out.length<n){const cf=cross.filter(w=>w.featured).sort(byDate).slice(0,n-out.length);out=out.concat(cf,sortPick(cross.filter(w=>!w.featured),n-out.length-cf.length))}
   return{ws:out.sort(byDate),hidden:all.length-out.length};
  }
- const short=s=>{let w=0,o='';for(const ch of s){w+=/[\u2e80-\uffff]/.test(ch)?2:1;if(w>40)return o+'…';o+=ch}return o};
+ const short=s=>{s=String(s||'');let w=0,o='',b=0;for(const ch of s){const dw=/[\u2e80-\uffff]/.test(ch)?2:1;if(w+dw>40){const cut=(b?o.slice(0,b):o).trimEnd();return (cut||o)+'…'}o+=ch;w+=dw;if(/[\s\-/]/.test(ch)||/[\u2e80-\uffff]/.test(ch))b=o.length}return o};
  const el=document.getElementById('c-tree');
  const cx=document.createElement('canvas').getContext('2d');
  const tw=(s,px,b)=>{cx.font=(b?'bold ':'')+px+'px '+textStyle.fontFamily;return Math.max(0,...String(s).split('\n').map(x=>cx.measureText(x).width))};
@@ -316,7 +318,7 @@ if(has.events)renderTL();
   for(const u of units(line)){const c2=cur+u;if(cur&&tw(c2.trimEnd(),px,b)>maxW){out.push(cur.trimEnd());cur=u.trimStart()}else cur=c2}
   if(cur)out.push(cur.trimEnd());return out.join('\n')}).join('\n')}
  const picks=DK.map(k=>[k,pick(k)]);
- const leafName=w=>(w.featured?'★ ':'')+short(w.name);
+ const leafName=w=>(w.featured?'★ ':'')+short(workLabel(w));
  const rootW=tw(DATA.taxRoot,15,true)+20,leafMax=Math.max(40,...picks.flatMap(([k,p])=>p.ws.map(w=>tw(leafName(w),12)))),dirMax=Math.max(40,...DK.map(k=>tw(DIRS[k].name,12.5,true)));
  // narrow screens (<520px): the root label (= report topic, shown in the page title anyway) is hidden to give the
  // direction names room; hover the root node for it
@@ -331,7 +333,7 @@ if(has.events)renderTL();
  el.style.height=treeH(el.clientWidth||800)+'px';
  const c=mk('c-tree');  // after the height is set, so the chart gets the full canvas
  function leaf(x,k){const cr=x.primary!==k;
-  return{name:leafName(x),full:x.name,
+  return{name:leafName(x),full:workLabel(x),
    status:x.status+(x.featured?' · ★ '+L.featured_tip:'')+(cr?' · '+L.tree_cross_tip.replace('{dir}',(DIRS[x.primary]||{}).short||x.primary):''),
    itemStyle:{color:x.featured&&!cr?DC[k]:'#fff',borderColor:DC[k],borderType:cr?'dashed':'solid'},label:cr?{color:'#6b7280'}:undefined}}
  const moreLeaf=(k,h)=>({name:L.tree_more.replace('{n}',h),more:k,itemStyle:{color:'#e2e8f0',borderColor:'#64748b',borderType:'dotted'},label:{color:'#64748b',fontStyle:'italic'}});
@@ -369,9 +371,10 @@ document.querySelectorAll('#wt th[data-k]').forEach(th=>th.onclick=()=>{const k=
 function renderW(){
  const q=document.getElementById('wq').value.trim().toLowerCase(),st=document.getElementById('wst').value,yr=document.getElementById('wyr').value;
  let ws=W.filter(w=>(!wDir||dl(w.dirs).includes(wDir))&&(st===''||(st==='f'?w.featured:String(+w.peer)===st))&&(!yr||w.date.startsWith(yr))&&(!q||(w.name+(w.title||'')+w.inst+w.contrib+w.status).toLowerCase().includes(q)));
- ws.sort((a,b)=>String(a[wSort.k]).localeCompare(String(b[wSort.k]),'zh')*wSort.d);
+ const sortKey=w=>wSort.k==='name'?workLabel(w):String(w[wSort.k]??'');
+ ws.sort((a,b)=>sortKey(a).localeCompare(sortKey(b),'zh')*wSort.d);
  document.getElementById('wcount').textContent=L.count.replace('{n}',ws.length).replace('{p}',ws.filter(w=>w.peer).length);
- document.querySelector('#wt tbody').innerHTML=ws.map(w=>`<tr><td class="wd">${dseg(w.date)}</td><td class="wn">${w.featured?`<span class="feat" title="${esc(L.featured_tip)}">★</span>`:''}<a class="nm" href="${safeUrl(w.url)}" target="_blank" rel="noopener" title="${esc(w.title||'')}">${esc(w.name)}</a>${w.preprint_url?`<a class="pre-link" href="${safeUrl(w.preprint_url)}" target="_blank" rel="noopener">[${esc(L.preprint_link)}]</a>`:''}</td><td class="wdirs">${dtags(w.dirs)}</td><td class="wi">${esc(w.inst)}</td><td class="ws"><span class="tag ${w.peer?'peer':'pre'}">${esc(w.status)}</span></td><td class="wc">${esc(w.contrib)}</td></tr>`).join('');
+ document.querySelector('#wt tbody').innerHTML=ws.map(w=>`<tr><td class="wd">${dseg(w.date)}</td><td class="wn">${w.featured?`<span class="feat" title="${esc(L.featured_tip)}">★</span>`:''}<a class="nm" href="${safeUrl(w.url)}" target="_blank" rel="noopener" title="${esc(workTip(w))}">${esc(workLabel(w))}</a>${w.preprint_url?`<a class="pre-link" href="${safeUrl(w.preprint_url)}" target="_blank" rel="noopener">[${esc(L.preprint_link)}]</a>`:''}</td><td class="wdirs">${dtags(w.dirs)}</td><td class="wi">${esc(w.inst)}</td><td class="ws"><span class="tag ${w.peer?'peer':'pre'}">${esc(w.status)}</span></td><td class="wc">${esc(w.contrib)}</td></tr>`).join('');
 }
 renderW();
 
@@ -402,7 +405,7 @@ function showCountry(n){
  let h=`<h3>${esc(NM(n))}</h3><p class="legend-note">${L.teams_n} ${ts.length} · ${L.works_n} ${ws.length} · ${L.dir_dist}：${Object.entries(dc).sort((a,b)=>b[1]-a[1]).map(([k,v])=>esc(DIRS[k].short)+'×'+v).join('、')||'—'}</p>`;
  if(!ts.length&&!ws.length)h+=`<p>${L.none_in_country}</p>`;
  h+=ts.map(t=>`<div class="pt"><b>${esc(t.name)}</b> <span class="legend-note">${esc(t.type)}</span><div>${dtags(t.dirs)}</div><div>${L.rep_works}：${esc(t.works)}</div></div>`).join('');
- if(ws.length)h+=`<h4 style="margin:12px 0 4px">${L.works_n}（${ws.length}）</h4><div style="font-size:12.5px">`+ws.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(w=>`<div>· <a href="${safeUrl(w.url)}" target="_blank" rel="noopener">${esc(w.name)}</a> <span class="legend-note">${esc(w.date)}｜${esc(w.status)}</span></div>`).join('')+'</div>';
+ if(ws.length)h+=`<h4 style="margin:12px 0 4px">${L.works_n}（${ws.length}）</h4><div style="font-size:12.5px">`+ws.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(w=>`<div>· <a href="${safeUrl(w.url)}" target="_blank" rel="noopener" title="${esc(workTip(w))}">${esc(workLabel(w))}</a> <span class="legend-note">${esc(w.date)}｜${esc(w.status)}</span></div>`).join('')+'</div>';
  document.getElementById('mpanel').innerHTML=h;
 }
 function drawCty(){const d=mapData().sort((a,b)=>a.value-b.value);ctyC.setOption({textStyle,title:{text:metric==='team'?L.cty_team_title:L.cty_work_title,textStyle:{fontSize:14}},tooltip:{},grid:{left:8,right:30,top:36,bottom:20,containLabel:true},xAxis:{type:'value',minInterval:1},yAxis:{type:'category',data:d.map(x=>x.cn),axisLabel:{formatter:v=>v.length>12?v.slice(0,11)+'…':v}},series:[{type:'bar',data:d.map(x=>x.value),itemStyle:{color:'#6366f1',borderRadius:[0,6,6,0]},label:{show:true,position:'right'}}]},true);ctyC.off('click');ctyC.on('click',p=>{const e=d.find(x=>x.cn===p.name);showCountry(e?e.name:p.name)})}

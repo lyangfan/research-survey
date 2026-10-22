@@ -52,10 +52,10 @@ description: Use when the user asks for a comprehensive literature or field surv
 ## 4. 生成 HTML → 详见 [references/data-schema.md](references/data-schema.md)、[references/html-build-and-verify.md](references/html-build-and-verify.md)
 1. 新建数据目录（可复制 `examples/agent-science-mini/` 再替换内容）：`meta.json`、`works.json`、`teams.json`、`timeline.json`、`repos.json`、可选 `portals.json`、`narrative/{summary,scope,challenges,caveats}.html`。
 2. 写 narrative：执行摘要（5–8 条关键发现，每条有事实和来源）、范围与方法（时间范围：用户指定的范围或“未设时间限制”；来源、检索式与命中数；**用了哪些检索策略**（关键词/名称检索/滚雪球/门户与仓库挖掘/必收清单/手工补充）、**关键词检索对必收清单的召回率**（总体与各方向）、各方向饱和情况与来源构成表；预印本与正式版的合并规则；状态标注、计数口径、核查日期与时区）、挑战与趋势、注意事项与未核实项（含失效链接）。
-3. `python scripts/build.py <data_dir> --check`，修完 error、看过 warning 后 `python scripts/build.py <data_dir> -o out/survey.html`。输出单个自包含 HTML（内联 ECharts 与地图，离线可用）；缺省的板块自动隐藏、目录自动编号；未写 `meta.period` 时柱状图按数据跨度自动选年/半年/季度。
+3. `python scripts/build.py <data_dir> --check`，修完 error、看过 warning 后 `python scripts/build.py <data_dir> -o out/survey.html`。输出单个自包含 HTML（内联 ECharts 与地图，离线可用）；缺省的板块自动隐藏、目录自动编号；未写 `meta.period` 时柱状图按数据跨度自动选年/半年/季度。`works.json` 里 `title` 是原文全称，代表作表和国家面板显示它。`name` 只作简称（`Virtual Lab`、`SciMON`），不要写成 `title[:60]` 或停在单词 / 连字符中间。`--check` 对这种硬截给出 `hard-cut` 警告。`scripts/repair_work_names.py <data_dir>/works.json --write` 可用 `title` 把硬截的 `name` 写回去。页面不依赖这一步。
 
 ## 5. 截图验证（交付前必做）
-`python scripts/screenshot.py out/survey.html --outdir out/screens`：浏览器依次尝试 Playwright 自带 Chromium → 缓存目录里的其他 Chromium 版本/headless shell → 系统 Chrome/Chromium → 自动执行 `python -m playwright install chromium`（`--no-install` 关闭；也可 `--chrome PATH`）；检查 console 报错、横向溢出、空图表，截取首屏和**所有可见板块**（含摘要、范围、趋势、注意事项），长板块另按视口切成 `_p1/_p2…` 便于阅读。**逐张查看**：中文无方块字、地图着色且点击面板有内容、所有图表渲染、表格行数正确、长标签没有被截断；代表作表的日期与标题不重叠（窄屏下自动变为卡片，可用 `--width 800` 再截一次）；无代码方向在开源板块显示说明而不是空条目。有问题修数据/模板后重建。
+`python scripts/screenshot.py out/survey.html --outdir out/screens`：浏览器依次尝试 Playwright 自带 Chromium → 缓存目录里的其他 Chromium 版本/headless shell → 系统 Chrome/Chromium → 自动执行 `python -m playwright install chromium`（`--no-install` 关闭；也可 `--chrome PATH`）；检查 console 报错、横向溢出、空图表，并检查代表作表「工作」列的文字就是 `title`（空则 `name`）、长标题没有被 `white-space:nowrap` 或 `overflow:hidden` 裁掉、状态标签没有被裁切。任一项失败则退出码为 1。同时截取首屏和**所有可见板块**（含摘要、范围、趋势、注意事项），长板块另按视口切成 `_p1/_p2…` 便于阅读。**逐张查看**：中文无方块字、地图着色且点击面板有内容、所有图表渲染、表格行数正确、长标题在格内换行而不是被截断；代表作表的日期与标题不重叠（窄屏下自动变为卡片，可用 `--width 800` 再截一次）；无代码方向在开源板块显示说明而不是空条目。有问题修数据/模板后重建。
 
 ## 6. 交付
 给用户：HTML 路径、截图、`references.bib/.ris`、数据目录（便于以后增补）、检索日志（`search_log.tsv`）、核验日志（`verify_lookups.tsv`）、必收清单与召回率表（`must_verified.tsv`、`recall.tsv`）；在回复里说明核查日期（带时区）、收录规模、主要局限与未核实项。

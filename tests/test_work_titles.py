@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Works table shows the full title. Shortening a name never cuts inside a word."""
 import json
 import os
 import sys
 import tempfile
 import textwrap
 import unittest
+
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:
+    sync_playwright = None
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -122,16 +126,17 @@ class HardCutTest(unittest.TestCase):
 
 class TemplateContractTest(unittest.TestCase):
     def test_table_and_country_list_show_title(self):
-        html = open(os.path.join(ROOT, "scripts", "template.html"), encoding="utf-8").read()
+        with open(os.path.join(ROOT, "scripts", "template.html"), encoding="utf-8") as f:
+            html = f.read()
         self.assertIn("function workLabel(", html)
         self.assertIn("${esc(workLabel(w))}", html)
         self.assertNotIn("${esc(w.name)}</a>", html)
-        # the works cell is the anchor inside td.wn
         self.assertIn('td class="wn"', html)
         self.assertLess(html.index('td class="wn"'), html.index("${esc(workLabel(w))}"))
 
     def test_screenshot_checks_full_titles(self):
-        src = open(os.path.join(ROOT, "scripts", "screenshot.py"), encoding="utf-8").read()
+        with open(os.path.join(ROOT, "scripts", "screenshot.py"), encoding="utf-8") as f:
+            src = f.read()
         self.assertIn("works column missing full title", src)
         self.assertIn("status tag clipped", src)
 
@@ -163,14 +168,10 @@ class CheckWarnTest(unittest.TestCase):
 
 
 class RenderedTableTest(unittest.TestCase):
-    """Build a tiny survey and read the works column the way a browser does."""
-
     def test_built_page_shows_title_not_the_slice(self):
-        playwright = _playwright()
-        if playwright is None:
+        if sync_playwright is None:
             self.skipTest("playwright is not installed")
         html_path = _build_fixture()
-        from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
             browser = _launch(p)
             if browser is None:
@@ -202,18 +203,9 @@ class RenderedTableTest(unittest.TestCase):
                 }
             """))
             self.assertEqual(clipped, [])
-            # a long status string is fully present, not a clipped prefix
             status = page.eval_on_selector("#wt tbody td.ws .tag", "el => el.textContent")
             self.assertIn("Nature Computational Science", status)
             browser.close()
-
-
-def _playwright():
-    try:
-        import playwright  # noqa: F401
-        return True
-    except ImportError:
-        return None
 
 
 def _launch(p):
@@ -240,15 +232,17 @@ def _which(name):
 
 
 def _build_fixture():
-    """Minimal data dir whose works.json has the truncated names from the report."""
     src = os.path.join(ROOT, "examples", "agent-science-mini")
     tmp = tempfile.mkdtemp(prefix="survey-titles-")
     for name in ("meta.json", "teams.json", "timeline.json", "repos.json"):
-        raw = open(os.path.join(src, name), encoding="utf-8").read()
-        open(os.path.join(tmp, name), "w", encoding="utf-8").write(raw)
+        with open(os.path.join(src, name), encoding="utf-8") as f:
+            raw = f.read()
+        with open(os.path.join(tmp, name), "w", encoding="utf-8") as f:
+            f.write(raw)
     os.makedirs(os.path.join(tmp, "narrative"), exist_ok=True)
     for name in ("summary", "scope", "challenges", "caveats"):
-        open(os.path.join(tmp, "narrative", name + ".html"), "w", encoding="utf-8").write("<p>fixture</p>")
+        with open(os.path.join(tmp, "narrative", name + ".html"), "w", encoding="utf-8") as f:
+            f.write("<p>fixture</p>")
     works = [{
         "name": VL[:60],
         "title": VL,
@@ -274,7 +268,8 @@ def _build_fixture():
         "contrib": "自驱动实验室",
         "checked": "2026-10-22",
     }]
-    json.dump(works, open(os.path.join(tmp, "works.json"), "w", encoding="utf-8"), ensure_ascii=False)
+    with open(os.path.join(tmp, "works.json"), "w", encoding="utf-8") as f:
+        json.dump(works, f, ensure_ascii=False)
     world = {
         "type": "FeatureCollection",
         "features": [{
@@ -284,7 +279,8 @@ def _build_fixture():
         }],
     }
     world_path = os.path.join(tmp, "world.geojson")
-    json.dump(world, open(world_path, "w", encoding="utf-8"))
+    with open(world_path, "w", encoding="utf-8") as f:
+        json.dump(world, f)
     out = os.path.join(tmp, "survey.html")
     build.render(tmp, out, world_path, None, True)
     return out

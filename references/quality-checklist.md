@@ -16,7 +16,8 @@
 - [ ] 计数口径（团队数、代表作数、香港等地区归属）写进“范围与方法”。
 - [ ] 湿实验/实验型方向没有硬凑仓库：设了 `repo_expected: false` + `no_repo_reason`，并在 `resources` 里给出数据集、实验方案、数据门户或生物样本库（有链接）；开源板块对它们显示说明而不是空条目。
 - [ ] GitHub 数据有抓取日期；自定义/非商用许可证已写进 `license_note`；成熟但低频更新的工具设了 `stable: true`。
-- [ ] `build.py --check` 无 error；`screenshot.py` 退出码 0，并逐张看过截图（代表作表日期与标题不重叠；窄屏 `--width 800` 下为卡片布局）。
+- [ ] `works.json` 的 `name` 是真正的简称（方法名、冒号前的名字），不是 `title` 的 60 字符切片，也不是停在连字符上的残段（`Toward self`、`The AI co`）。`build.py --check` 对这种硬截打印 `hard-cut` 警告。可用 `scripts/repair_work_names.py --write` 用 `title` 回填。
+- [ ] `build.py --check` 无 error；`screenshot.py` 退出码 0。脚本会失败当代表作表「工作」列不是完整 `title`，或状态标签被裁切。再逐张看截图（代表作表日期与标题不重叠，长标题换行；窄屏 `--width 800` 下为卡片布局）。
 - [ ] 导出 `references.bib/.ris` 并在 Zotero 中试导入一次。
 - [ ] 报告时间一律写明时区。
 

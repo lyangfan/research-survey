@@ -19,7 +19,7 @@ python scripts/build.py <data_dir> -o out/survey.html
 | 执行摘要 / 范围与方法 | `narrative/*.html` 原样插入（范围与方法需写明用户指定的时间范围或“未设时间限制”）|
 | 发展路径 | 阶段卡片 + 类别标签筛选时间轴；事件点开显示描述和来源；按半年/年/季度 × 主方向的堆叠柱状图（横轴取 `meta.time_range`；未设时按数据中最早到最晚年份；未写 `meta.period` 时按跨度自动选粒度）|
 | 方向分类体系 | ECharts 树图（点击方向 → 跳到代表作表并筛选；边距按标签实测宽度计算，窄屏时叶子标签以 … 截断、方向名换行，完整名在悬停提示里）+ 方向卡片（无代码方向带“无代码仓库”说明）；每个方向的叶子：主方向里程碑（★）全部显示 → 本方向其他工作按 `meta.tree_sort` 补位 → 交叉标注的工作只填剩余空位（虚线灰色）→ “+N 篇 → 代表作表”（点击筛选）。方向名换行时括号/标点不会单独落到下一行；图高按叶子数和换行后的方向名行数计算，窗口宽度 <520px 时隐藏根节点标签（悬停可见）给方向名让位；只在宽度变化时重新布局（整页截图不会把节点截在动画中途） |
-| 代表性工作 | 方向标签、状态（含“★ 仅里程碑”）、年份筛选，关键词搜索，表头排序，同行评审/预印本徽标（长文本换行时为圆角矩形），已发表工作附“[预印本]”链接。日期列宽按字体的数字宽度（`ch`）计算，必要时在连字符处换行，不会压到标题；容器宽度 ≤760px 时每条工作变为卡片（日期+状态在上，标题、方向、机构、贡献依次排列）|
+| 代表性工作 | 方向标签、状态（含“★ 仅里程碑”）、年份筛选，关键词搜索，表头排序，同行评审/预印本徽标（长文本换行时为圆角矩形），已发表工作附“[预印本]”链接。「工作」列显示 `title`（空则显示 `name`），长标题在格内换行，不靠悬停才看全文。状态标签同样换行，不被裁成一行。日期列宽按字体的数字宽度（`ch`）计算，必要时在连字符处换行，不会压到标题；容器宽度 ≤760px 时每条工作变为卡片（日期+状态在上，标题、方向、机构、贡献依次排列）|
 | 团队与进展 | 地区/类型筛选，进展等级条 |
 | 地区热力图 | 团队数/代表作数切换，点击国家在右侧面板列出团队、方向分布、代表作；各国柱状图（可点击）+ 主要国家方向雷达图 |
 | 数据门户与资源 | `portals.json`：类型筛选、机构、覆盖范围、访问方式、链接状态（✓/?/✗ + 检查日期，来自 `check_urls.py`）|
@@ -50,3 +50,23 @@ python scripts/screenshot.py out/survey.html --outdir out/screens
 - 地图有颜色、右侧面板有内容；柱状图/树图/雷达图/散点图都渲染出来。
 - 代表作表日期与标题之间有空隙、不重叠（桌面宽度和 `--width 800` 各看一次；窄屏为卡片布局）。
 - 表格行数与数据一致；长文本没有撑破布局；状态标签、Stars 图的仓库名没有被截掉；树图每个方向的里程碑（★）在自己的方向下，交叉标注叶子为虚线灰色，“+N 篇”叶子可点击；窄屏（`--width 390`）下可阅读。
+- 代表作表「工作」列的文字等于 `title`（`title` 为空才等于 `name`）。长标题换行，状态标签没有被裁切。`screenshot.py` 用页面 DOM 检查这两件事，失败则退出码为 1，不必只靠肉眼。
+
+## 5. 用已有 works.json 重建 survey.html
+
+`title` 已经是完整标题时，重新构建就会让代表作表显示全文。不必先改 `name`。数据目录是含 `meta.json` 和 `works.json` 的文件夹。下面以 `surveys/agent-science-bio-drug-2026-10-21` 为例，在本技能目录执行。把 `-o` 换成你要覆盖的 HTML，例如 `file:///Users/liuyangfan/Downloads/survey.html` 对应的本地路径。
+
+```bash
+python scripts/build.py surveys/agent-science-bio-drug-2026-10-21 --check
+python scripts/build.py surveys/agent-science-bio-drug-2026-10-21 -o /Users/liuyangfan/Downloads/survey.html
+python scripts/screenshot.py /Users/liuyangfan/Downloads/survey.html --outdir /tmp/survey-screens
+```
+
+`--check` 若打印 `name is a hard-cut prefix of title`，只是数据里的简称被截过。页面仍然显示 `title`。想把这些 `name` 写回完整标题时再跑：
+
+```bash
+python scripts/repair_work_names.py surveys/agent-science-bio-drug-2026-10-21/works.json
+python scripts/repair_work_names.py surveys/agent-science-bio-drug-2026-10-21/works.json --write
+```
+
+第一行只打印将改的条目。`--write` 才改文件。`SciMON`、`CRESt` 这种真正的简称会留下。

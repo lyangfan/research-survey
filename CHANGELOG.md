@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-22 · works table shows the full title
+
+- The works column and the country-panel work list render `title` when it is non-empty, and `name` only when `title` is empty. Long titles wrap. Status tags wrap and are not clipped. `screenshot.py` fails when the column text is not that label, or when a status tag is clipped.
+- `name` stays an optional short label (`Virtual Lab`, `SciMON`). `scripts/work_names.py` shortens on a word boundary and adds `…`. `build.py --check` warns when `name` is a hard-cut prefix of `title` (a 60-character slice, or a cut such as `Toward self`). `scripts/repair_work_names.py --write` copies `title` back into those names. `merge_dedup.py` no longer slices a title with `[:60]` / `[:40]` for its preprint notes. The works draft still stores the full title in `name`.
+
 ## 2026-10-01 · v1.4 — fixes from the post-GWAS test run; multi-strategy retrieval
 
 A run of v1.3 on "post-GWAS: from association signals to causal variants, genes and mechanisms" (12 directions, 180 works, no time limit) logged 9 issues in `skill_test_notes.md`, and showed that keyword search alone surfaced only 51–52 of the first 148 hand-listed landmark DOIs (35%). This release fixes the issues and makes non-keyword retrieval mandatory.
