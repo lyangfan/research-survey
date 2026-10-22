@@ -54,19 +54,23 @@ python scripts/screenshot.py out/survey.html --outdir out/screens
 
 ## 5. 用已有 works.json 重建 survey.html
 
-`title` 已经是完整标题时，重新构建就会让代表作表显示全文。不必先改 `name`。数据目录是含 `meta.json` 和 `works.json` 的文件夹。下面以 `surveys/agent-science-bio-drug-2026-10-21` 为例，在本技能目录执行。把 `-o` 换成你要覆盖的 HTML，例如 `file:///Users/liuyangfan/Downloads/survey.html` 对应的本地路径。
+`title` 已经是完整标题时，重新构建就会让代表作表显示全文。不必先改 `name`。
+
+`build.py` 的参数是含 `meta.json` 和 `works.json` 的数据目录。常见布局是 `surveys/<id>/data/works.json`，所以参数是 `surveys/<id>/data`，不是综述根目录。`repair_work_names.py` 的参数是 `works.json` 这个文件。
+
+下面在本技能目录执行。这份综述的数据目录是 `surveys/agent-science-bio-drug-2026-10-21/data`。若当前目录已经是综述根目录，把数据目录写成 `data`，把回填文件写成 `data/works.json`。要覆盖 `file:///Users/liuyangfan/Downloads/survey.html` 时，把 `-o` 换成 `/Users/liuyangfan/Downloads/survey.html`。
 
 ```bash
-python scripts/build.py surveys/agent-science-bio-drug-2026-10-21 --check
-python scripts/build.py surveys/agent-science-bio-drug-2026-10-21 -o /Users/liuyangfan/Downloads/survey.html
-python scripts/screenshot.py /Users/liuyangfan/Downloads/survey.html --outdir /tmp/survey-screens
+python3 scripts/build.py surveys/agent-science-bio-drug-2026-10-21/data --check
+python3 scripts/build.py surveys/agent-science-bio-drug-2026-10-21/data -o /tmp/survey.html
+python3 scripts/screenshot.py /tmp/survey.html --outdir /tmp/survey-screens
 ```
 
 `--check` 若打印 `name is a hard-cut prefix of title`，只是数据里的简称被截过。页面仍然显示 `title`。想把这些 `name` 写回完整标题时再跑：
 
 ```bash
-python scripts/repair_work_names.py surveys/agent-science-bio-drug-2026-10-21/works.json
-python scripts/repair_work_names.py surveys/agent-science-bio-drug-2026-10-21/works.json --write
+python3 scripts/repair_work_names.py surveys/agent-science-bio-drug-2026-10-21/data/works.json
+python3 scripts/repair_work_names.py surveys/agent-science-bio-drug-2026-10-21/data/works.json --write
 ```
 
 第一行只打印将改的条目。`--write` 才改文件。`SciMON`、`CRESt` 这种真正的简称会留下。

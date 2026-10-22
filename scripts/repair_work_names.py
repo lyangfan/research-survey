@@ -5,8 +5,8 @@
 The report already shows `title` in the works table. This only repairs the data.
 A real short name (SciMON, CRESt, the clause before ':') is left alone.
 
-  python scripts/repair_work_names.py surveys/agent-science-bio-drug-2026-10-21/works.json
-  python scripts/repair_work_names.py surveys/agent-science-bio-drug-2026-10-21/works.json --write
+  python3 scripts/repair_work_names.py surveys/agent-science-bio-drug-2026-10-21/data/works.json
+  python3 scripts/repair_work_names.py surveys/agent-science-bio-drug-2026-10-21/data/works.json --write
 
 Without --write or -o the command prints the rows it would change and does not touch the file.
 """

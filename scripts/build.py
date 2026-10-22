@@ -345,7 +345,7 @@ def validate(meta, works, teams, repos, events, portals=()):
         if is_hard_truncated_name(w.get("name"), w.get("title")):
             warn(f"{tag}: name is a hard-cut prefix of title ({w.get('name')!r}). "
                  "The works table shows title. Set name to a real short name (Virtual Lab, SciMON) "
-                 "or run scripts/repair_work_names.py --write")
+                 "or run scripts/repair_work_names.py <data_dir>/works.json --write")
         if w.get("date") and meta.get("check_date") and w["date"] > meta["check_date"]:
             warn(f"{tag}: date {w['date']} is after check_date (issue date in the future? use the online date)")
     for i, t in enumerate(teams):

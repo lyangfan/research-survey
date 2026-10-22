@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""`title` is the full title the report shows. `name` is an optional short label."""
+"""`title` is the full title the report shows. `name` is the required short label."""
 
 
 def _cjk(ch):

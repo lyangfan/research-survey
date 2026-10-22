@@ -3,7 +3,7 @@
 ## 2026-10-22 · works table shows the full title
 
 - The works column and the country-panel work list render `title` when it is non-empty, and `name` only when `title` is empty. Long titles wrap. Status tags wrap and are not clipped. `screenshot.py` fails when the column text is not that label, or when a status tag is clipped.
-- `name` stays an optional short label (`Virtual Lab`, `SciMON`). `scripts/work_names.py` shortens on a word boundary and adds `…`. `build.py --check` warns when `name` is a hard-cut prefix of `title` (a 60-character slice, or a cut such as `Toward self`). `scripts/repair_work_names.py --write` copies `title` back into those names. `merge_dedup.py` no longer slices a title with `[:60]` / `[:40]` for its preprint notes. The works draft still stores the full title in `name`.
+- `name` stays a required short label (`Virtual Lab`, `SciMON`). `build.py` errors when it is missing. The works table, the country panel, and tree leaves draw `workLabel` (`title` when it is non-empty, otherwise `name`). `scripts/work_names.py` shortens on a word boundary and adds `…`. `build.py --check` warns when `name` is a hard-cut prefix of `title` (a 60-character slice, or a cut such as `Toward self`). `scripts/repair_work_names.py <data_dir>/works.json --write` copies `title` back into those names. `<data_dir>` is the folder that contains `works.json` (`surveys/<id>/data` in the usual layout). `merge_dedup.py` no longer slices a title with `[:60]` / `[:40]` for its preprint notes. The works draft still stores the full title in `name`.
 
 ## 2026-10-01 · v1.4 — fixes from the post-GWAS test run; multi-strategy retrieval
 
